@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0">
     <modelVersion>4.0.0</modelVersion>
-    
+
     <groupId>com.arkflame</groupId>
     <artifactId>flamecore</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
-    
+
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        
+
         <!-- Library Versions - Update these as needed -->
         <spigot.version>1.20.1-R0.1-SNAPSHOT</spigot.version>
         <mysql.version>8.0.33</mysql.version>
@@ -20,7 +20,7 @@
         <sqlite.version>3.42.0.0</sqlite.version>
         <hikaricp.version>5.0.1</hikaricp.version>
     </properties>
-    
+
     <repositories>
         <repository>
             <id>spigot-repo</id>
@@ -30,8 +30,12 @@
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
         </repository>
+        <repository>
+            <id>placeholderapi</id>
+            <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
+        </repository>
     </repositories>
-    
+
     <dependencies>
         <!-- Spigot API -->
         <dependency>
@@ -40,7 +44,7 @@
             <version>${spigot.version}</version>
             <scope>provided</scope>
         </dependency>
-        
+
         <!-- Optional Dependencies (not shaded, must be added manually by plugin developers) -->
         <dependency>
             <groupId>mysql</groupId>
@@ -49,7 +53,7 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
-        
+
         <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
@@ -57,7 +61,7 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
-        
+
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver-sync</artifactId>
@@ -65,7 +69,7 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
-        
+
         <dependency>
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
@@ -73,7 +77,7 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
-        
+
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
@@ -81,7 +85,7 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
-        
+
         <!-- Vault API (optional) -->
         <dependency>
             <groupId>com.github.MilkBowl</groupId>
@@ -90,8 +94,16 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
+
+        <!-- PlaceholderAPI (optional) -->
+        <dependency>
+            <groupId>me.clip</groupId>
+            <artifactId>placeholderapi</artifactId>
+            <version>2.11.5</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
-    
+
     <build>
         <resources>
             <resource>
@@ -99,7 +111,7 @@
                 <filtering>true</filtering>
             </resource>
         </resources>
-        
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -110,7 +122,7 @@
                     <target>8</target>
                 </configuration>
             </plugin>
-            
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
