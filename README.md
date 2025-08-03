@@ -220,4 +220,20 @@ import java.io.File;
 Location pos1 = // ... first corner
 Location pos2 = // ... second corner
 SchematicAPI.copy(pos1, pos2).thenAccept(schematic -> {
-    File file = new File(plugin.get
+    File file = new File(plugin.getDataFolder() + "/arenas/", "arena.arkschem");
+    schematic.save(file).thenRun(() -> player.sendMessage("Arena saved!"));
+});
+
+Location pasteLocation = // ... paste location
+SchematicAPI.load(file).thenAccept(schematic -> {
+    schematic.paste(pasteLocation, (success) -> player.sendMessage("Arena pasted!"));
+});
+```
+
+## Contributing
+
+Contributions are welcome! Please submit pull requests or open issues on the [GitHub repository](https://github.com/yourusername/FlameCore). Ensure code follows the project's style guidelines and includes appropriate tests.
+
+## License
+
+FlameCore is licensed under the [MIT License](LICENSE). See the LICENSE file for details.
