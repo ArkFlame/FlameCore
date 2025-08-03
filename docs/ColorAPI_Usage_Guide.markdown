@@ -67,25 +67,28 @@ ColorAPI.create()
 
 ## 4. Sending to Console or Multiple Players
 
-Send composed messages to the console or multiple players.
+Use the `.send(CommandSender sender)` method to send composed messages to the console or specific players, including broadcasting to multiple players by iterating over them.
 
 ```java
+import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
+
 // Send to console
 ColorAPI.create()
     .append("&aServer status: ")
     .append("<#00FF00>Online")
-    .sendToConsole();
+    .send(Bukkit.getConsoleSender());
 
 // Broadcast to all online players
-ColorAPI.create()
+ColorAPI message = ColorAPI.create()
     .append("<#FF5555>Server restarting in ")
-    .append("&c5 minutes!")
-    .sendToAll();
+    .append("&c5 minutes!");
+Bukkit.getOnlinePlayers().forEach(player -> message.send(player));
 
 // Send to a specific list of players
 List<Player> staff = // ... get staff list
-ColorAPI.create()
+ColorAPI staffMessage = ColorAPI.create()
     .append("&9[STAFF] ")
-    .append("&fMaintenance scheduled.")
-    .send(staff);
+    .append("&fMaintenance scheduled.");
+staff.forEach(player -> staffMessage.send(player));
 ```
