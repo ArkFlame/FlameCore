@@ -1,25 +1,22 @@
 package com.arkflame.core.schematicapi;
 
-import org.bukkit.util.Vector;
-
 /**
- * A simple data class that pairs a relative position with a serialized BlockWrapper string.
- * This replaces the old SchematicBlock class.
+ * A simple data class pairing a relative position with serialized block data.
+ * Using integer primitives for performance and smaller memory footprint.
  */
 public class RelativeBlockData {
-    private final Vector relativePosition;
+    private final int relativeX, relativeY, relativeZ;
     private final String serializedBlockData;
 
-    public RelativeBlockData(Vector relativePosition, String serializedBlockData) {
-        this.relativePosition = relativePosition;
+    public RelativeBlockData(int relativeX, int relativeY, int relativeZ, String serializedBlockData) {
+        this.relativeX = relativeX;
+        this.relativeY = relativeY;
+        this.relativeZ = relativeZ;
         this.serializedBlockData = serializedBlockData;
     }
 
-    public Vector getRelativePosition() {
-        return relativePosition;
-    }
-
-    public String getSerializedBlockData() {
-        return serializedBlockData;
-    }
+    public int getRelativeX() { return relativeX; }
+    public int getRelativeY() { return relativeY; }
+    public int getRelativeZ() { return relativeZ; }
+    public String getSerializedBlockData() { return serializedBlockData; }
 }

@@ -18,28 +18,13 @@ import java.util.Map;
 public class ModernBlockDataHandler implements BlockDataHandler {
 
     @Override
-    public boolean needsUpdate(Block block, BlockWrapper wrapper) {
-        // The optimization check for modern versions.
-        if (wrapper.getExtraData().containsKey("blockData")) {
-            BlockData newBlockData = Bukkit.createBlockData(wrapper.getExtraData().get("blockData"));
-            return !block.getBlockData().equals(newBlockData);
-        } else {
-            // Fallback check for legacy-generated wrappers.
-            return block.getType() != wrapper.getMaterial();
-        }
-    }
-
-    @Override
     public BlockWrapper capture(Block block) {
         String materialName = block.getType().name();
-        // Legacy data is still captured for maximum backwards compatibility if needed
-        byte data = block.getData(); 
+        byte data = block.getData(); // Still capture for compatibility
         Map<String, String> extraData = new HashMap<>();
 
-        // Capture the full modern BlockData string. This is key for forward compatibility.
         extraData.put("blockData", block.getBlockData().getAsString());
 
-        // Tile entity data is captured the same way as legacy
         if (block.getState() instanceof Sign) {
             Sign sign = (Sign) block.getState();
             for (int i = 0; i < 4; i++) {
@@ -47,7 +32,7 @@ public class ModernBlockDataHandler implements BlockDataHandler {
             }
         } else if (block.getState() instanceof Skull) {
             Skull skull = (Skull) block.getState();
-            if (skull.getOwningPlayer() != null) {
+            if (skull.getOwningPlayer() != null && skull.getOwningPlayer().getName() != null) {
                 extraData.put("skullOwner", skull.getOwningPlayer().getName());
             }
         } else if (block.getState() instanceof InventoryHolder) {
@@ -59,26 +44,45 @@ public class ModernBlockDataHandler implements BlockDataHandler {
     }
 
     @Override
-    public void apply(Block block, BlockWrapper wrapper) {
-        Map<String, String> extraData = wrapper.getExtraData();
-        
-        if (extraData.containsKey("blockData")) {
-            BlockData newBlockData = Bukkit.createBlockData(extraData.get("blockData"));
-            // Optimization: Only set the BlockData if it has changed
+    public boolean needsUpdate(Block block, BlockWrapper wrapper) {
+        // Check physical block data first.
+        if (wrapper.getExtraData().containsKey("blockData")) {
+            BlockData newBlockData = Bukkit.createBlockData(wrapper.getExtraData().get("blockData"));
             if (!block.getBlockData().equals(newBlockData)) {
-                block.setBlockData(newBlockData, false);
+                return true;
             }
         } else {
-            // Fallback for wrappers created on legacy versions
-            Material material = wrapper.getMaterial();
-            if (block.getType() != material) {
-                block.setType(material, false);
+            // Fallback for legacy wrappers.
+            if (block.getType() != wrapper.getMaterial()) {
+                return true;
             }
         }
 
+        // If physical state is the same, check for tile entity differences.
+        Map<String, String> wrapperExtra = wrapper.getExtraData();
+        if (!wrapperExtra.isEmpty()) {
+            BlockWrapper currentBlockWrapper = this.capture(block);
+            if (!currentBlockWrapper.getExtraData().equals(wrapperExtra)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    @Override
+    public void apply(Block block, BlockWrapper wrapper) {
+        // Set the primary block state first.
+        if (wrapper.getExtraData().containsKey("blockData")) {
+            block.setBlockData(Bukkit.createBlockData(wrapper.getExtraData().get("blockData")), false);
+        } else {
+            block.setType(wrapper.getMaterial(), false);
+        }
+
+        Map<String, String> extraData = wrapper.getExtraData();
         if (extraData.isEmpty()) return;
 
-        // Apply tile entity data
+        // NOW get the state object AFTER the block type is correct.
         if (block.getState() instanceof Sign) {
             Sign sign = (Sign) block.getState();
             for (int i = 0; i < 4; i++) {
@@ -88,8 +92,6 @@ public class ModernBlockDataHandler implements BlockDataHandler {
         } else if (block.getState() instanceof Skull) {
             Skull skull = (Skull) block.getState();
             if (extraData.containsKey("skullOwner")) {
-                // Skull logic requires a bit more care on modern versions if using profiles
-                // For now, setting by name is a robust fallback.
                 skull.setOwner(extraData.get("skullOwner"));
             }
             skull.update(true, false);

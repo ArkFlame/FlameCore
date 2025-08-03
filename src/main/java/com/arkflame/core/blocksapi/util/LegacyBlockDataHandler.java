@@ -12,6 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Handles block data for legacy servers (1.8 - 1.12) using reflection
@@ -21,28 +22,23 @@ public class LegacyBlockDataHandler implements BlockDataHandler {
 
     // --- Reflection Caches ---
     private static Method getDataMethod;
-    private static Method setDataMethod;
+    private static Method setDataMethod; // Reflects setData(byte, boolean)
 
     static {
-        // This block runs once when the class is loaded.
-        // It safely finds the old methods without crashing on modern versions.
         try {
-            // Find the byte-based methods: getData() and setData(byte)
             getDataMethod = Block.class.getMethod("getData");
-            setDataMethod = Block.class.getMethod("setData", byte.class);
+            setDataMethod = Block.class.getMethod("setData", byte.class, boolean.class);
         } catch (NoSuchMethodException e) {
-            // This is expected if the server is NOT a legacy version.
-            // We can leave them as null; they will only be called if the Legacy handler is active.
+            // Expected on non-legacy servers.
         }
     }
-    
+
     @Override
     public BlockWrapper capture(Block block) {
         String materialName = block.getType().name();
         byte data = getLegacyData(block);
         Map<String, String> extraData = new HashMap<>();
 
-        // Tile entity data capturing remains the same.
         if (block.getState() instanceof Sign) {
             Sign sign = (Sign) block.getState();
             for (int i = 0; i < 4; i++) {
@@ -68,25 +64,35 @@ public class LegacyBlockDataHandler implements BlockDataHandler {
 
     @Override
     public boolean needsUpdate(Block block, BlockWrapper wrapper) {
-        // This is the optimization check.
-        return block.getType() != wrapper.getMaterial() || getLegacyData(block) != wrapper.getLegacyData();
+        // First, check the physical block state.
+        if (block.getType() != wrapper.getMaterial() || getLegacyData(block) != wrapper.getLegacyData()) {
+            return true;
+        }
+
+        // If physical state matches, check tile entity state for changes.
+        Map<String, String> wrapperExtra = wrapper.getExtraData();
+        if (!wrapperExtra.isEmpty()) {
+            // Capture the current block's state to compare against the wrapper's state.
+            BlockWrapper currentBlockWrapper = this.capture(block);
+            // If the extra data maps are not equal, an update is needed.
+            if (!currentBlockWrapper.getExtraData().equals(wrapperExtra)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     @Override
     public void apply(Block block, BlockWrapper wrapper) {
-        Material material = wrapper.getMaterial();
-        byte data = wrapper.getLegacyData();
-
-        // Optimization: Only change the block if necessary
-        if (block.getType() != material || getLegacyData(block) != data) {
-            block.setType(material, false);
-            setLegacyData(block, data, false);
-        }
+        // Set the primary block state first.
+        block.setType(wrapper.getMaterial(), false);
+        setLegacyData(block, wrapper.getLegacyData(), false);
 
         Map<String, String> extraData = wrapper.getExtraData();
         if (extraData.isEmpty()) return;
 
-        // Tile entity application logic remains the same.
+        // NOW get the state object AFTER the block type is correct. This is the fix.
         if (block.getState() instanceof Sign) {
             Sign sign = (Sign) block.getState();
             for (int i = 0; i < 4; i++) {
@@ -108,18 +114,12 @@ public class LegacyBlockDataHandler implements BlockDataHandler {
                     e.printStackTrace();
                 }
             }
-        } // Add other tile entities as needed
+        }
     }
 
-    /**
-     * Safely gets the legacy data value of a block using reflection.
-     * @param block The block to get data from.
-     * @return The block's data value, or 0 if reflection fails.
-     */
     private byte getLegacyData(Block block) {
-        if (getDataMethod == null) return 0; // Should not happen if this handler is used correctly.
+        if (getDataMethod == null) return 0;
         try {
-            // Invokes block.getData() and casts the result to a byte.
             return (byte) getDataMethod.invoke(block);
         } catch (IllegalAccessException | InvocationTargetException e) {
             e.printStackTrace();
@@ -127,21 +127,10 @@ public class LegacyBlockDataHandler implements BlockDataHandler {
         }
     }
 
-    /**
-     * Safely sets the legacy data value of a block using reflection.
-     * The `setData(byte, boolean)` method also needs to be reflected for physics control.
-     * @param block The block to set data on.
-     * @param data The data value.
-     * @param applyPhysics Whether to apply physics.
-     */
     private void setLegacyData(Block block, byte data, boolean applyPhysics) {
-        // For simplicity and because we almost always set physics to false during schem pasting,
-        // we will reflect the `setData(byte)` method. For physics control, a second
-        // reflected method would be needed, but this is the most common use case.
         if (setDataMethod == null) return;
         try {
-            // Invokes block.setData(data)
-            setDataMethod.invoke(block, data);
+            setDataMethod.invoke(block, data, applyPhysics);
         } catch (IllegalAccessException | InvocationTargetException e) {
             e.printStackTrace();
         }

@@ -2,15 +2,15 @@ package com.arkflame.core.schematicapi;
 
 import com.arkflame.core.blocksapi.BlocksAPI;
 import com.arkflame.core.blocksapi.BlockWrapper;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Vector;
 
 import java.io.File;
-import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -18,27 +18,27 @@ import java.util.function.Consumer;
 
 /**
  * Main entry point for the Schematic API.
- * This version is fully integrated with BlocksAPI for version-agnostic block handling.
+ * This version is fully integrated with a queued BlocksAPI and features a robust, paced pasting system.
  */
 public final class SchematicAPI {
+    private static final int MAX_BLOCKS_PER_TICK = 500; // How many blocks to process per tick from all schematics combined.
+
     public static JavaPlugin plugin;
-    private static final ConcurrentLinkedQueue<PasteOperation> pasteQueue = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<PasteTask> activePastes = new ConcurrentLinkedQueue<>();
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
             throw new IllegalStateException("SchematicAPI is already initialized.");
         }
         plugin = pluginInstance;
-        // The BlocksAPI must be initialized first for this to work!
+        // Ensure dependent APIs are initialized.
         BlocksAPI.init(pluginInstance);
         startProcessorTask();
     }
 
     /**
-     * Copies a cuboid region into a new Schematic object asynchronously.
-     * @param pos1 The first corner of the region.
-     * @param pos2 The second corner of the region.
-     * @return A CompletableFuture that will complete with the Schematic.
+     * Asynchronously copies a cuboid region into a new Schematic object.
+     * This operation is performed on the main thread to safely access world data.
      */
     public static CompletableFuture<Schematic> copy(Location pos1, Location pos2) {
         CompletableFuture<Schematic> future = new CompletableFuture<>();
@@ -53,15 +53,15 @@ public final class SchematicAPI {
                 int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
                 int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
 
-                // We now store a map of relative positions to BlockWrapper strings.
-                List<RelativeBlockData> relativeBlocks = new ArrayList<>();
+                List<RelativeBlockData> relativeBlocks = new java.util.ArrayList<>();
                 for (int x = minX; x <= maxX; x++) {
                     for (int y = minY; y <= maxY; y++) {
                         for (int z = minZ; z <= maxZ; z++) {
+                            // This must run on the main thread.
                             Block block = world.getBlockAt(x, y, z);
-                            BlockWrapper wrapper = BlocksAPI.dataHandler.capture(block); // Use the internal handler for sync capture
+                            BlockWrapper wrapper = BlocksAPI.dataHandler.capture(block);
                             relativeBlocks.add(new RelativeBlockData(
-                                    new Vector(x - minX, y - minY, z - minZ),
+                                    x - minX, y - minY, z - minZ,
                                     wrapper.serialize()
                             ));
                         }
@@ -72,33 +72,49 @@ public final class SchematicAPI {
         }.runTask(plugin);
         return future;
     }
-
-    /**
-     * Creates a schematic of a single block asynchronously.
-     * @param location The location of the block.
-     * @return A CompletableFuture that will complete with the Schematic.
-     */
+    
     public static CompletableFuture<Schematic> copy(Location location) {
         return copy(location, location);
     }
     
     /**
-     * Loads a schematic from a file asynchronously.
-     * @param file The .arkschem file to load.
-     * @return A CompletableFuture that will complete with the loaded Schematic.
+     * Loads a schematic from a file asynchronously and safely.
+     * File I/O is async, but final object creation with Bukkit objects is on the main thread.
      */
     public static CompletableFuture<Schematic> load(File file) {
-        return CompletableFuture.supplyAsync(() -> SchematicIO.load(file),
-                run -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, run));
+        CompletableFuture<Schematic> finalFuture = new CompletableFuture<>();
+
+        // Step 1: Read the file into a raw data object asynchronously.
+        CompletableFuture.supplyAsync(
+            () -> SchematicIO.loadRaw(file),
+            run -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, run)
+        ).thenAccept(rawData -> {
+            // Step 2: Use the raw data to create the final Schematic on the main thread.
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (rawData == null) {
+                        finalFuture.complete(null);
+                        return;
+                    }
+                    
+                    Location origin = null;
+                    // This is now thread-safe as it runs on the main server thread.
+                    if (rawData.hasOrigin()) {
+                        World world = Bukkit.getWorld(rawData.getWorldName());
+                        if (world != null) {
+                            origin = new Location(world, rawData.getOriginX(), rawData.getOriginY(), rawData.getOriginZ());
+                        }
+                    }
+                    
+                    finalFuture.complete(new Schematic(rawData.getBlocks()).setOrigin(origin));
+                }
+            }.runTask(plugin);
+        });
+
+        return finalFuture;
     }
 
-    /**
-     * Asynchronously loads all schematics from a folder and queues them for pasting at their origin.
-     * Useful for restoring persistent block changes on startup.
-     *
-     * @param folder The folder to scan for .arkschem files.
-     * @param deleteOnPaste If true, the schematic file will be deleted after it is successfully pasted.
-     */
     public static void restoreAllFromFolder(File folder, boolean deleteOnPaste) {
         if (!folder.isDirectory()) return;
         File[] files = folder.listFiles((dir, name) -> name.endsWith(".arkschem"));
@@ -116,46 +132,36 @@ public final class SchematicAPI {
             });
         }
     }
-
-    // Internal method to add a paste job to the queue.
+    
+    // Internal method to add a new paste job to the processor.
     static void queuePaste(Schematic schematic, Location pasteLocation, Consumer<Boolean> callback) {
-        pasteQueue.add(new PasteOperation(schematic, pasteLocation, callback));
+        activePastes.add(new PasteTask(schematic, pasteLocation, callback));
     }
 
     private static void startProcessorTask() {
         new BukkitRunnable() {
             @Override
             public void run() {
-                PasteOperation operation = pasteQueue.poll();
-                if (operation == null) {
-                    return; // Queue is empty
+                if (activePastes.isEmpty()) {
+                    return;
                 }
 
-                Schematic schematic = operation.getSchematic();
-                Location pasteOrigin = operation.getPasteOrigin();
-                
-                // This entire process is now offloaded to the BlocksAPI, which handles the main thread synchronization internally.
-                for (RelativeBlockData relativeBlock : schematic.getBlocks()) {
-                    Vector offset = relativeBlock.getRelativePosition();
-                    Location blockLocation = pasteOrigin.clone().add(offset);
-                    String serializedData = relativeBlock.getSerializedBlockData();
+                int blocksProcessedThisTick = 0;
+                Iterator<PasteTask> iterator = activePastes.iterator();
+
+                while (iterator.hasNext() && blocksProcessedThisTick < MAX_BLOCKS_PER_TICK) {
+                    PasteTask task = iterator.next();
                     
-                    // The magic happens here: setBlock handles the main thread and optimization checks.
-                    BlocksAPI.setBlock(blockLocation, serializedData);
-                }
+                    // Process a chunk of this specific paste task.
+                    blocksProcessedThisTick += task.process(MAX_BLOCKS_PER_TICK - blocksProcessedThisTick);
 
-                // Since setBlock is now handling its own threading, we can immediately call back.
-                // For a more robust system, you might count operations and use a final callback.
-                // But for simplicity and performance, this is excellent.
-                if(operation.getCallback() != null) {
-                   new BukkitRunnable() {
-                       @Override
-                       public void run() {
-                           operation.getCallback().accept(true);
-                       }
-                   }.runTask(plugin);
+                    if (task.isFinished()) {
+                        // Task is complete, call its callback and remove it.
+                        task.complete(plugin);
+                        iterator.remove();
+                    }
                 }
             }
-        }.runTaskTimerAsynchronously(plugin, 20L, 1L); // Start after 1 second, run every tick.
+        }.runTaskTimer(plugin, 1L, 1L);
     }
 }

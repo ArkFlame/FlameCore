@@ -1,19 +1,17 @@
 package com.arkflame.core.schematicapi;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.util.Vector;
 
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Internal utility for handling the saving and loading of schematics.
- * This version reads and writes serialized BlockWrapper strings.
+ * Internal utility for handling schematic I/O.
+ * Now loads into a raw, thread-safe data object before final conversion.
  */
 class SchematicIO {
-    private static final int FORMAT_VERSION = 2; // New format version!
+    private static final int FORMAT_VERSION = 2;
 
     public static void save(Schematic schematic, File file) {
         try (DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file)))) {
@@ -31,10 +29,9 @@ class SchematicIO {
             List<RelativeBlockData> blocks = schematic.getBlocks();
             dos.writeInt(blocks.size());
             for (RelativeBlockData blockData : blocks) {
-                dos.writeShort(blockData.getRelativePosition().getBlockX());
-                dos.writeShort(blockData.getRelativePosition().getBlockY());
-                dos.writeShort(blockData.getRelativePosition().getBlockZ());
-                // The magic is here: just write the full serialized string.
+                dos.writeInt(blockData.getRelativeX());
+                dos.writeInt(blockData.getRelativeY());
+                dos.writeInt(blockData.getRelativeZ());
                 dos.writeUTF(blockData.getSerializedBlockData());
             }
         } catch (IOException e) {
@@ -42,7 +39,10 @@ class SchematicIO {
         }
     }
 
-    public static Schematic load(File file) {
+    /**
+     * Loads the schematic into a raw, intermediate data object that is thread-safe.
+     */
+    public static SchematicData loadRaw(File file) {
         if (!file.exists()) return null;
         try (DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)))) {
             int version = dis.readInt();
@@ -50,31 +50,55 @@ class SchematicIO {
                 System.err.println("Schematic " + file.getName() + " has an unsupported format version!");
                 return null;
             }
-
-            Location origin = null;
+            
+            SchematicData data = new SchematicData();
             if (dis.readBoolean()) {
-                String worldName = dis.readUTF();
-                double x = dis.readDouble();
-                double y = dis.readDouble();
-                double z = dis.readDouble();
-                origin = new Location(Bukkit.getWorld(worldName), x, y, z);
+                data.setWorldName(dis.readUTF());
+                data.setOriginX(dis.readDouble());
+                data.setOriginY(dis.readDouble());
+                data.setOriginZ(dis.readDouble());
+                data.setHasOrigin(true);
             }
 
             int blockCount = dis.readInt();
             List<RelativeBlockData> blocks = new ArrayList<>(blockCount);
             for (int i = 0; i < blockCount; i++) {
-                short x = dis.readShort();
-                short y = dis.readShort();
-                short z = dis.readShort();
-                // Just read the full string. Deserialization happens later.
+                int x = dis.readInt();
+                int y = dis.readInt();
+                int z = dis.readInt();
                 String serializedData = dis.readUTF();
-                blocks.add(new RelativeBlockData(new Vector(x, y, z), serializedData));
+                blocks.add(new RelativeBlockData(x, y, z, serializedData));
             }
+            data.setBlocks(blocks);
             
-            return new Schematic(blocks).setOrigin(origin);
+            return data;
         } catch (IOException e) {
             e.printStackTrace();
             return null;
         }
+    }
+
+    /**
+     * A simple, thread-safe container for raw schematic data read from a file.
+     */
+    static class SchematicData {
+        private boolean hasOrigin = false;
+        private String worldName;
+        private double originX, originY, originZ;
+        private List<RelativeBlockData> blocks;
+        
+        // Getters and Setters
+        public boolean hasOrigin() { return hasOrigin; }
+        public void setHasOrigin(boolean hasOrigin) { this.hasOrigin = hasOrigin; }
+        public String getWorldName() { return worldName; }
+        public void setWorldName(String worldName) { this.worldName = worldName; }
+        public double getOriginX() { return originX; }
+        public void setOriginX(double originX) { this.originX = originX; }
+        public double getOriginY() { return originY; }
+        public void setOriginY(double originY) { this.originY = originY; }
+        public double getOriginZ() { return originZ; }
+        public void setOriginZ(double originZ) { this.originZ = originZ; }
+        public List<RelativeBlockData> getBlocks() { return blocks; }
+        public void setBlocks(List<RelativeBlockData> blocks) { this.blocks = blocks; }
     }
 }
