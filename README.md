@@ -1,6 +1,6 @@
 # FlameCore
 
-FlameCore is a comprehensive and lightweight library designed to streamline Spigot and BungeeCord plugin development. It provides a suite of intuitive APIs for creating modern, feature-rich Minecraft plugins with minimal boilerplate code. FlameCore supports a wide range of functionalities, including rich text formatting, command management, GUI menus, database integration, in-game notifications, material handling, and schematic operations, all while ensuring compatibility across different Minecraft server versions.
+FlameCore is a comprehensive and lightweight library designed to streamline Spigot and BungeeCord plugin development. It provides a suite of intuitive APIs for creating modern, feature-rich Minecraft plugins with minimal boilerplate code. FlameCore supports a wide range of functionalities, including rich text formatting, command management, GUI menus, database integration, in-game notifications, material handling, and schematic operations, all while ensuring compatibility across different Minecraft server versions. FlameCore is not a standalone plugin but is intended to be packaged within your plugin.
 
 ## Features
 
@@ -13,226 +13,92 @@ FlameCore is a comprehensive and lightweight library designed to streamline Spig
 - **BossBarAPI**: Create dynamic boss bars with customizable text, progress, colors, and styles.
 - **MaterialAPI**: Safely handle materials across Minecraft versions with fallback support and helper methods.
 - **SchematicAPI**: Save, load, and paste block structures for arenas or restorable blocks.
+- **BlocksAPI**: Capture and restore individual block states with asynchronous, lag-free processing.
+- **ConfigAPI**: Manage configuration files with a clean, centralized interface for reading and writing values.
+- **LangAPI**: Handle localized messages with placeholder support and integration with PlaceholderAPI.
 
-## Getting Started
+## Installation
 
-### Installation
+To use FlameCore in your Maven project, add the JitPack repository and the FlameCore dependency to your `pom.xml`. Since FlameCore is packaged within your plugin, you must shade and relocate its classes to avoid conflicts.
 
-1. Download the latest FlameCore JAR from the [Releases](https://github.com/yourusername/FlameCore/releases) page.
-2. Add the JAR to your plugin's `libs` folder and include it in your build path.
-3. Ensure your plugin depends on FlameCore in your `plugin.yml`:
-   ```yaml
-   depend: [FlameCore]
-   ```
+### Step 1: Add the JitPack Repository
 
-### Basic Setup
-
-Initialize the necessary APIs in your plugin's `onEnable` method. Below is an example initializing key APIs:
-
-```java
-import com.arkflame.core.bossbarapi.BossBarManager;
-import com.arkflame.core.menuapi.MenuAPI;
-import com.arkflame.core.schematicapi.SchematicAPI;
-import com.arkflame.core.commandapi.CommandAPI;
-import com.arkflame.core.sqliteapi.SQLiteAPI;
-import com.arkflame.core.sqliteapi.SQLiteConfig;
-import org.bukkit.plugin.java.JavaPlugin;
-
-public class MyPlugin extends JavaPlugin {
-    private SQLiteAPI sqliteAPI;
-
-    @Override
-    public void onEnable() {
-        // Initialize APIs
-        CommandAPI.init(this);
-        MenuAPI.init(this);
-        BossBarManager.init(this);
-        SchematicAPI.init(this);
-
-        // Initialize SQLiteAPI
-        SQLiteConfig dbConfig = new SQLiteConfig(this, "playerdata.db");
-        this.sqliteAPI = new SQLiteAPI(this, dbConfig);
-
-        getLogger().info("FlameCore APIs initialized.");
-    }
-
-    @Override
-    public void onDisable() {
-        if (sqliteAPI != null) {
-            sqliteAPI.shutdown();
-        }
-    }
-}
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
 ```
 
-## Usage Examples
+### Step 2: Add the FlameCore Dependency
 
-### ColorAPI: Sending a Gradient Message
-
-```java
-import com.arkflame.core.colorapi.ColorAPI;
-import org.bukkit.entity.Player;
-
-Player player = // ... get player
-ColorAPI.colorize("<#55C1FF>Welcome to the server!</#FFAA00>")
-    .send(player);
+```xml
+<dependency>
+    <groupId>com.github.ArkFlame</groupId>
+    <artifactId>FlameCore</artifactId>
+    <version>1.0.0</version>
+</dependency>
 ```
 
-### CommandAPI: Creating a Command with Subcommands
+### Step 3: Shade and Relocate FlameCore
 
-```java
-import com.arkflame.core.commandapi.Command;
-import com.arkflame.core.commandapi.sender.SenderType;
-import org.bukkit.ChatColor;
+Use the Maven Shade Plugin to bundle FlameCore into your plugin's JAR and relocate its packages to your plugin's package namespace (e.g., `${project.groupId}.flamecore`). Add the following to your `pom.xml`:
 
-Command.create("kit")
-    .setDescription("Gives a player a kit.")
-    .requires(SenderType.PLAYER)
-    .setExecutor(ctx -> ctx.getPlayer().sendMessage(ChatColor.GOLD + "Available kits: knight, archer"))
-    .addSubCommand(Command.create("get")
-        .addArgument("kitname", String.class, "The kit to receive.")
-        .setExecutor(ctx -> ctx.getPlayer().sendMessage(ChatColor.GREEN + "You received the '" + ctx.getArgument("kitname") + "' kit!"))
-    )
-    .register();
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <version>3.5.0</version>
+            <executions>
+                <execution>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>shade</goal>
+                    </goals>
+                    <configuration>
+                        <relocations>
+                            <relocation>
+                                <pattern>com.arkflame.core</pattern>
+                                <shadedPattern>${project.groupId}.flamecore</shadedPattern>
+                            </relocation>
+                        </relocations>
+                    </configuration>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
 ```
 
-### MenuAPI: Creating an Animated Menu
+Ensure `${project.groupId}` is defined in your `pom.xml` (e.g., `com.yourplugin`). This relocates FlameCore's classes (e.g., `com.arkflame.core`) to your plugin's package (e.g., `com.yourplugin.flamecore`).
 
-```java
-import com.arkflame.core.menuapi.MenuBuilder;
-import com.arkflame.core.menuapi.ItemBuilder;
-import org.bukkit.Material;
+## API Guides
 
-new MenuBuilder(9, "&eWeapon Forge")
-    .setItem(4, new ItemBuilder(Material.WOOD_SWORD)
-        .animationInterval(10)
-        .addMaterialFrame(Material.WOOD_SWORD)
-        .addMaterialFrame(Material.STONE_SWORD)
-        .addNameFrame("&7Basic Sword")
-        .addNameFrame("&b&lUltimate Sword")
-        .build())
-    .open(player);
-```
+Detailed usage guides for each FlameCore API are available in the `docs/` directory:
 
-### SQLiteAPI/MySQLAPI: Storing Player Data
+- [ActionBarAPI Getting Started Guide](docs/ActionBarAPI_Getting_Started_Guide.markdown)
+- [BlocksAPI Getting Started Guide](docs/BlocksAPI_Getting_Started_Guide.markdown)
+- [BossBarAPI Getting Started Guide](docs/BossBarAPI_Getting_Started_Guide.markdown)
+- [ColorAPI Usage Guide](docs/ColorAPI_Usage_Guide.markdown)
+- [CommandAPI Getting Started Guide](docs/CommandAPI_Getting_Started_Guide.markdown)
+- [ConfigAPI Getting Started Guide](docs/ConfigAPI_Getting_Started_Guide.markdown)
+- [LangAPI Getting Started Guide](docs/LangAPI_Getting_Started_Guide.markdown)
+- [MaterialAPI Getting Started Guide](docs/MaterialAPI_Getting_Started_Guide.markdown)
+- [MenuAPI Usage Guide](docs/MenuAPI_Usage_Guide.markdown)
+- [MySQLAPI Getting Started Guide](docs/MySQLAPI_Getting_Started_Guide.markdown)
+- [SchematicAPI Getting Started Guide](docs/SchematicAPI_Getting_Started_Guide.markdown)
+- [SQLiteAPI Getting Started Guide](docs/SQLiteAPI_Getting_Started_Guide.markdown)
+- [TitleAPI Getting Started Guide](docs/TitleAPI_Getting_Started_Guide.markdown)
 
-```java
-import com.arkflame.core.sqliteapi.SQLiteAPI;
-import com.arkflame.core.sqliteapi.annotations.PrimaryKey;
-import java.util.UUID;
-
-public class PlayerStats {
-    @PrimaryKey
-    private UUID uuid;
-    private int kills;
-
-    public PlayerStats(UUID uuid) {
-        this.uuid = uuid;
-        this.kills = 0;
-    }
-    public void addKill() { this.kills++; }
-}
-
-// In PlayerListener
-@EventHandler
-public void onPlayerJoin(PlayerJoinEvent event) {
-    Player player = event.getPlayer();
-    sqliteAPI.loadById(PlayerStats.class, player.getUniqueId()).thenAccept(stats -> {
-        if (stats == null) {
-            stats = new PlayerStats(player.getUniqueId());
-        }
-        sqliteAPI.save(stats);
-    });
-}
-```
-
-### TitleAPI: Sending a Title
-
-```java
-import com.arkflame.core.titleapi.TitleAPI;
-
-TitleAPI.create()
-    .title("<#00BFFF>Level Up!</#FFFFFF>")
-    .subtitle("&eYou are now level 10!")
-    .fadeIn(10)
-    .stay(60)
-    .fadeOut(20)
-    .send(player);
-```
-
-### ActionBarAPI: Displaying a Status
-
-```java
-import com.arkflame.core.actionbarapi.ActionBarAPI;
-
-ActionBarAPI.create("<#2980B9>Mana: &b85 / 100")
-    .send(player);
-```
-
-### BossBarAPI: Creating a Dynamic Boss Bar
-
-```java
-import com.arkflame.core.bossbarapi.BossBarAPI;
-import com.arkflame.core.bossbarapi.enums.BarColor;
-import com.arkflame.core.bossbarapi.enums.BarStyle;
-import org.bukkit.scheduler.BukkitRunnable;
-
-BossBarAPI bar = BossBarAPI.create()
-    .text("&e&lEvent starting in &a&l30s")
-    .progress(1.0)
-    .color(BarColor.YELLOW)
-    .style(BarStyle.SEGMENTED_20)
-    .addPlayer(player);
-
-new BukkitRunnable() {
-    int i = 30;
-    public void run() {
-        if (i <= 0) {
-            bar.text("&a&lEvent has started!");
-            bar.destroy();
-            cancel();
-            return;
-        }
-        bar.text("&e&lEvent starting in &a&l" + i + "s");
-        bar.progress((double) i / 30.0);
-        i--;
-    }
-}.runTaskTimer(plugin, 0L, 20L);
-```
-
-### MaterialAPI: Handling Materials Safely
-
-```java
-import com.arkflame.core.materialapi.MaterialAPI;
-import org.bukkit.Material;
-
-Material logMaterial = MaterialAPI.getOrAir("LOG", "OAK_LOG");
-player.getInventory().addItem(new ItemStack(logMaterial));
-```
-
-### SchematicAPI: Saving and Pasting Structures
-
-```java
-import com.arkflame.core.schematicapi.SchematicAPI;
-import org.bukkit.Location;
-import java.io.File;
-
-Location pos1 = // ... first corner
-Location pos2 = // ... second corner
-SchematicAPI.copy(pos1, pos2).thenAccept(schematic -> {
-    File file = new File(plugin.getDataFolder() + "/arenas/", "arena.arkschem");
-    schematic.save(file).thenRun(() -> player.sendMessage("Arena saved!"));
-});
-
-Location pasteLocation = // ... paste location
-SchematicAPI.load(file).thenAccept(schematic -> {
-    schematic.paste(pasteLocation, (success) -> player.sendMessage("Arena pasted!"));
-});
-```
+Each guide provides step-by-step instructions and code examples to help you integrate the respective API into your plugin.
 
 ## Contributing
 
-Contributions are welcome! Please submit pull requests or open issues on the [GitHub repository](https://github.com/yourusername/FlameCore). Ensure code follows the project's style guidelines and includes appropriate tests.
+Contributions are welcome! Please submit pull requests or open issues on the [GitHub repository](https://github.com/ArkFlame/FlameCore). Ensure code follows the project's style guidelines and includes appropriate tests.
 
 ## License
 
