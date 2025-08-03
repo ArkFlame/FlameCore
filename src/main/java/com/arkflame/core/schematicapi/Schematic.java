@@ -8,17 +8,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * Represents a schematic in memory, containing a list of blocks relative to an origin.
+ * Represents a schematic in memory, containing a list of relative blocks.
+ * This version uses serialized BlockWrapper strings for maximum compatibility.
  */
 public class Schematic {
-    private final List<SchematicBlock> blocks;
-    private Location origin; // Optional origin, primarily used for saving/restoring
+    // The list now holds our new data object instead of SchematicBlock
+    private final List<RelativeBlockData> blocks;
+    private Location origin;
 
-    public Schematic(List<SchematicBlock> blocks) {
+    public Schematic(List<RelativeBlockData> blocks) {
         this.blocks = blocks;
     }
 
-    public List<SchematicBlock> getBlocks() {
+    public List<RelativeBlockData> getBlocks() {
         return blocks;
     }
 

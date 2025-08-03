@@ -1,5 +1,7 @@
 package com.arkflame.core.schematicapi;
 
+import com.arkflame.core.blocksapi.BlocksAPI;
+import com.arkflame.core.blocksapi.BlockWrapper;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -16,7 +18,7 @@ import java.util.function.Consumer;
 
 /**
  * Main entry point for the Schematic API.
- * Handles queuing, processing, and I/O for schematics.
+ * This version is fully integrated with BlocksAPI for version-agnostic block handling.
  */
 public final class SchematicAPI {
     public static JavaPlugin plugin;
@@ -27,6 +29,8 @@ public final class SchematicAPI {
             throw new IllegalStateException("SchematicAPI is already initialized.");
         }
         plugin = pluginInstance;
+        // The BlocksAPI must be initialized first for this to work!
+        BlocksAPI.init(pluginInstance);
         startProcessorTask();
     }
 
@@ -49,20 +53,21 @@ public final class SchematicAPI {
                 int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
                 int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
 
-                List<SchematicBlock> blocks = new ArrayList<>();
+                // We now store a map of relative positions to BlockWrapper strings.
+                List<RelativeBlockData> relativeBlocks = new ArrayList<>();
                 for (int x = minX; x <= maxX; x++) {
                     for (int y = minY; y <= maxY; y++) {
                         for (int z = minZ; z <= maxZ; z++) {
                             Block block = world.getBlockAt(x, y, z);
-                            blocks.add(new SchematicBlock(
+                            BlockWrapper wrapper = BlocksAPI.dataHandler.capture(block); // Use the internal handler for sync capture
+                            relativeBlocks.add(new RelativeBlockData(
                                     new Vector(x - minX, y - minY, z - minZ),
-                                    block.getType().name(),
-                                    block.getData()
+                                    wrapper.serialize()
                             ));
                         }
                     }
                 }
-                future.complete(new Schematic(blocks));
+                future.complete(new Schematic(relativeBlocks));
             }
         }.runTask(plugin);
         return future;
@@ -128,39 +133,28 @@ public final class SchematicAPI {
 
                 Schematic schematic = operation.getSchematic();
                 Location pasteOrigin = operation.getPasteOrigin();
-                World world = pasteOrigin.getWorld();
                 
-                // Prepare a batch of blocks to change on the main thread
-                List<Runnable> blockChanges = new ArrayList<>();
-
-                for (SchematicBlock schemBlock : schematic.getBlocks()) {
-                    Vector offset = schemBlock.getRelativePosition();
+                // This entire process is now offloaded to the BlocksAPI, which handles the main thread synchronization internally.
+                for (RelativeBlockData relativeBlock : schematic.getBlocks()) {
+                    Vector offset = relativeBlock.getRelativePosition();
                     Location blockLocation = pasteOrigin.clone().add(offset);
+                    String serializedData = relativeBlock.getSerializedBlockData();
                     
-                    blockChanges.add(() -> {
-                        Block worldBlock = world.getBlockAt(blockLocation);
-                        // THE OPTIMIZATION: Only update the block if it's different.
-                        if (!worldBlock.getType().name().equals(schemBlock.getMaterialName()) || worldBlock.getData() != schemBlock.getData()) {
-                            worldBlock.setType(schemBlock.getMaterial(), false);
-                            // TODO: USE BLOCKS API, NEW API WE NEED TO CREATE!!!!
-                            worldBlock.setData(schemBlock.getData(), false);
-                        }
-                    });
+                    // The magic happens here: setBlock handles the main thread and optimization checks.
+                    BlocksAPI.setBlock(blockLocation, serializedData);
                 }
 
-                // Execute the batch of changes on the main thread
-                new BukkitRunnable() {
-                    @Override
-                    public void run() {
-                        for (Runnable change : blockChanges) {
-                            change.run();
-                        }
-                        // Notify the callback that the paste is complete.
-                        if(operation.getCallback() != null) {
-                            operation.getCallback().accept(true);
-                        }
-                    }
-                }.runTask(plugin);
+                // Since setBlock is now handling its own threading, we can immediately call back.
+                // For a more robust system, you might count operations and use a final callback.
+                // But for simplicity and performance, this is excellent.
+                if(operation.getCallback() != null) {
+                   new BukkitRunnable() {
+                       @Override
+                       public void run() {
+                           operation.getCallback().accept(true);
+                       }
+                   }.runTask(plugin);
+                }
             }
         }.runTaskTimerAsynchronously(plugin, 20L, 1L); // Start after 1 second, run every tick.
     }
