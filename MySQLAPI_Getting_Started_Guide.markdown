@@ -2,7 +2,26 @@
 
 The `MySQLAPI` provides a robust interface for managing data in a MySQL database for Spigot/BungeeCord plugins. This guide demonstrates how to initialize the API, define a data class, and use it to store and retrieve player statistics.
 
-## 1. Initialize MySQLAPI
+## 1. Dependencies
+
+Add the following MySQL and HikariCP dependencies to your `pom.xml` to enable database connectivity. These dependencies must be bundled to ensure they are included in your plugin's JAR file.
+
+```xml
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>${mysql.version}</version>
+</dependency>
+<dependency>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+    <version>${hikaricp.version}</version>
+</dependency>
+```
+
+Replace `${mysql.version}` and `${hikaricp.version}` with the latest versions (e.g., `8.0.33` for MySQL and `5.0.1` for HikariCP).
+
+## 2. Initialize MySQLAPI
 
 Initialize the `MySQLAPI` in your plugin's `onEnable` method, providing database connection details.
 
@@ -34,7 +53,7 @@ public class MyMySQLPlugin extends JavaPlugin {
 }
 ```
 
-## 2. Define a Data Class
+## 3. Define a Data Class
 
 Create a data class to represent the data you want to store, using annotations to define the table structure.
 
@@ -79,7 +98,7 @@ public class PlayerStats {
 }
 ```
 
-## 3. Load and Save Data
+## 4. Load and Save Data
 
 Use the `MySQLAPI` to load and save player data, such as when a player joins the server.
 
@@ -115,7 +134,7 @@ public class PlayerListener implements Listener {
 }
 ```
 
-## 4. Query Data with Commands
+## 5. Query Data with Commands
 
 Create a command to query player statistics, demonstrating how to retrieve data by ID or field.
 
@@ -128,7 +147,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class MyMySQLPlugin extends JavaPlugin {
-    // ... (initialization code from Step 1)
+    // ... (initialization code from Step 2)
 
     private void registerStatsCommand() {
         Command.create("stats")
