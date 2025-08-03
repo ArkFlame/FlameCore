@@ -38,7 +38,7 @@ To use FlameCore in your Maven project, add the JitPack repository and the Flame
 <dependency>
     <groupId>com.github.ArkFlame</groupId>
     <artifactId>FlameCore</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
