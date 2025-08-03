@@ -1,0 +1,44 @@
+# Spanish Language File for FlameCore Example Plugin
+errors:
+  player-not-found: "&cJugador no encontrado."
+
+commands:
+  help:
+    - "&e&lDemostración del API de FlameCore"
+    - "&7Usa &a/fc <subcomando> &7para probar las funciones."
+    - "&a/fc title <título> <subtítulo> [jugador] &7- Enviar un título."
+    - "&a/fc actionbar <mensaje> [jugador] &7- Enviar un action bar."
+    - "&a/fc bossbar <texto> [jugador] &7- Enviar un boss bar temporal."
+    - "&a/fc sendmessage <mensaje> &7- Enviar un mensaje de texto enriquecido."
+    - "&a/fc menu &7- Abrir un menú animado."
+    - "&a/fc blocksapi &7- Activar/desactivar la herramienta de copiar/pegar bloques."
+    - "&a/fc fakeblock &7- Crea un bloque falso temporal."
+    - "&a/fc schematic pos1/pos2/copy/paste/save &7- Herramienta de esquemáticos."
+  title:
+    sent: "&aTítulo enviado a {player}."
+  actionbar:
+    sent: "&aAction bar enviado a {player}."
+  bossbar:
+    sent: "&aBoss bar enviado a {player} por 10 segundos."
+  menu:
+    clicked: "&e¡Hiciste clic en el ítem animado!"
+  blocksapi:
+    enabled: "&aHerramienta de bloques activada. Clic izquierdo para copiar, clic derecho para pegar."
+    disabled: "&cHerramienta de bloques desactivada."
+    copying: "&eCopiando bloque..."
+    copied: "&aBloque copiado al portapapeles."
+    pasted: "&aPegando bloque desde el portapapeles."
+    no_clipboard: "&cTu portapapeles está vacío. Haz clic izquierdo en un bloque para copiarlo."
+  fakeblock:
+    sent: "&aSe te ha enviado un bloque de diamante falso en {x}, {y}, {z} por 10 segundos."
+  schematic:
+    pos1_set: "&aPosición 1 establecida."
+    pos2_set: "&aPosición 2 establecida."
+    no_selection: "&cDebes establecer ambas posiciones primero con /fc schem pos1/2."
+    no_clipboard: "&cTu portapapeles de esquemáticos está vacío. Usa /fc schem copy primero."
+    copy_start: "&eCopiando esquemático..."
+    copy_success: "&aEsquemático copiado al portapapeles."
+    paste_start: "&ePegando esquemático..."
+    paste_success: "&aPegado del esquemático completado."
+    save_start: "&eGuardando esquemático como {name}.arkschem..."
+    save_success: "&aEsquemático guardado como {name}.arkschem."

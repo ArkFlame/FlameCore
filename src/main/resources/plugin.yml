@@ -1,0 +1,17 @@
+name: ${project.name}
+version: ${project.version}
+main: ${plugin.mainClass}
+author: ${project.organization.name}
+api-version: 1.13
+softdepend: [PlaceholderAPI]
+
+commands:
+  flamecore:
+    description: Main command for the FlameCore example plugin.
+    aliases: [fc]
+    permission: flamecore.admin
+
+permissions:
+  flamecore.admin:
+    description: Allows access to all FlameCore example commands.
+    default: op

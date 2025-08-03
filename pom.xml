@@ -7,12 +7,18 @@
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
+    <name>FlameCore</name>
+    <organization>
+        <name>ArkFlame</name>
+    </organization>
+
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <plugin.mainClass>com.arkflame.flamecore.FlameCorePlugin</plugin.mainClass>
 
-        <!-- Library Versions - Update these as needed -->
+        <!-- Library Versions -->
         <spigot.version>1.20.1-R0.1-SNAPSHOT</spigot.version>
         <mysql.version>8.0.33</mysql.version>
         <redis.version>4.4.3</redis.version>
@@ -37,7 +43,7 @@
     </repositories>
 
     <dependencies>
-        <!-- Spigot API -->
+        <!-- Dependencies as before -->
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
@@ -45,7 +51,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Optional Dependencies (not shaded, must be added manually by plugin developers) -->
         <dependency>
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
@@ -86,7 +91,6 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Vault API (optional) -->
         <dependency>
             <groupId>com.github.MilkBowl</groupId>
             <artifactId>VaultAPI</artifactId>
@@ -95,7 +99,6 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- PlaceholderAPI (optional) -->
         <dependency>
             <groupId>me.clip</groupId>
             <artifactId>placeholderapi</artifactId>
@@ -118,8 +121,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>8</source>
-                    <target>8</target>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                 </configuration>
             </plugin>
 

@@ -1,0 +1,44 @@
+# English Language File for FlameCore Example Plugin
+errors:
+  player-not-found: "&cPlayer not found."
+
+commands:
+  help:
+    - "&e&lFlameCore API Showcase"
+    - "&7Use &a/fc <subcommand> &7to test features."
+    - "&a/fc title <title> <subtitle> [player] &7- Send a title."
+    - "&a/fc actionbar <message> [player] &7- Send an action bar."
+    - "&a/fc bossbar <text> [player] &7- Send a temporary boss bar."
+    - "&a/fc sendmessage <message> &7- Send a rich text message."
+    - "&a/fc menu &7- Open an animated menu."
+    - "&a/fc blocksapi &7- Toggle block copy/paste tool."
+    - "&a/fc fakeblock &7- Creates a temporary fake block."
+    - "&a/fc schematic pos1/pos2/copy/paste/save &7- Schematic tool."
+  title:
+    sent: "&aTitle sent to {player}."
+  actionbar:
+    sent: "&aAction bar sent to {player}."
+  bossbar:
+    sent: "&aBoss bar sent to {player} for 10 seconds."
+  menu:
+    clicked: "&eYou clicked the animated item!"
+  blocksapi:
+    enabled: "&aBlock tool enabled. Left-click to copy, right-click to paste."
+    disabled: "&cBlock tool disabled."
+    copying: "&eCopying block..."
+    copied: "&aBlock copied to clipboard."
+    pasted: "&aPasting block from clipboard."
+    no_clipboard: "&cYour clipboard is empty. Left-click a block to copy it."
+  fakeblock:
+    sent: "&aA fake diamond block has been sent to you at {x}, {y}, {z} for 10 seconds."
+  schematic:
+    pos1_set: "&aPosition 1 set."
+    pos2_set: "&aPosition 2 set."
+    no_selection: "&cYou must set both positions first with /fc schem pos1/2."
+    no_clipboard: "&cYour schematic clipboard is empty. Use /fc schem copy first."
+    copy_start: "&eCopying schematic..."
+    copy_success: "&aSchematic copied to clipboard."
+    paste_start: "&ePasting schematic..."
+    paste_success: "&aSchematic paste complete."
+    save_start: "&eSaving schematic to {name}.arkschem..."
+    save_success: "&aSchematic saved as {name}.arkschem."
