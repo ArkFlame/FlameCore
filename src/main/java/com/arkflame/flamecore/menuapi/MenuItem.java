@@ -22,6 +22,9 @@ public class MenuItem {
     private final List<String> nameFrames = new ArrayList<>();
     private final List<List<String>> loreFrames = new ArrayList<>();
     private int currentFrame = 0;
+    
+    // NEW: Tracks the direction of the animation (1 for forward, -1 for backward)
+    private int animationDirection = 1;
 
     public MenuItem(ItemStack itemStack) {
         this.currentStack = itemStack.clone();
@@ -65,55 +68,43 @@ public class MenuItem {
     
     /**
      * Called by the MenuAnimator to advance the animation frame.
-     * This version correctly loops the animation indefinitely.
-     * @return The ItemStack for the new frame, or null if no visual change occurred.
+     * This version implements a back-and-forth "ping-pong" animation loop.
      */
-    public ItemStack tick() {
-        if (!isAnimated()) {
-            return null;
-        }
+    public void tick() {
+        if (!isAnimated()) return;
 
         int totalFrames = getTotalFrames();
-        if (totalFrames <= 1) {
-            return null; // Not enough frames to animate.
-        }
+        if (totalFrames <= 1) return;
 
-        // --- THIS IS THE FIX ---
-        // Calculate the next frame index, ensuring it wraps around to 0.
-        int nextFrameIndex = (this.currentFrame + 1) % totalFrames;
+        // Calculate the next frame index based on the current direction
+        int nextFrameIndex = currentFrame + animationDirection;
+
+        // Check for boundaries and reverse direction if needed
+        if (nextFrameIndex >= totalFrames - 1) {
+            nextFrameIndex = totalFrames - 1; // Clamp to the end
+            animationDirection = -1; // Go backward next time
+        } else if (nextFrameIndex <= 0) {
+            nextFrameIndex = 0; // Clamp to the start
+            animationDirection = 1; // Go forward next time
+        }
         
-        ItemStack nextStack = buildFrame(nextFrameIndex);
-        
-        // Update the internal state to the new frame index.
+        // Update the internal state
         this.currentFrame = nextFrameIndex;
-
-        // Only return the new stack if it's visually different from the old one.
-        if (!nextStack.isSimilar(this.currentStack)) {
-            this.currentStack = nextStack;
-            return this.currentStack;
-        }
-
-        return null; // No visual update needed for this tick.
+        this.currentStack = buildFrame(this.currentFrame);
     }
 
-    /**
-     * Calculates the total number of frames in the animation, determined by the
-     * longest list of frames (material, name, or lore).
-     * @return The total number of animation frames.
-     */
     private int getTotalFrames() {
-        int max = 1; // Default to 1 to avoid division by zero errors
-        if (!materialFrames.isEmpty()) max = Math.max(max, materialFrames.size());
-        if (!nameFrames.isEmpty()) max = Math.max(max, nameFrames.size());
-        if (!loreFrames.isEmpty()) max = Math.max(max, loreFrames.size());
+        int max = 1;
+        if (materialFrames.size() > 1) max = Math.max(max, materialFrames.size());
+        if (nameFrames.size() > 1) max = Math.max(max, nameFrames.size());
+        if (loreFrames.size() > 1) max = Math.max(max, loreFrames.size());
         return max;
     }
 
     private ItemStack buildFrame(int frameIndex) {
         Material baseMaterial = getFrame(materialFrames, frameIndex, currentStack.getType());
-        if (baseMaterial == null) {
-            baseMaterial = Material.AIR;
-        }
+        if (baseMaterial == null) baseMaterial = Material.AIR;
+        
         ItemStack frameStack = new ItemStack(baseMaterial);
         ItemMeta meta = frameStack.getItemMeta();
         
@@ -123,7 +114,7 @@ public class MenuItem {
                 meta.setDisplayName(ColorAPI.colorize(name).toLegacyText());
             }
 
-            List<String> lore = getFrame(loreFrames, frameIndex, new ArrayList<>());
+            List<String> lore = getFrame(loreFrames, frameIndex, null);
             if (lore != null && !lore.isEmpty()) {
                 meta.setLore(lore.stream()
                         .map(line -> ColorAPI.colorize(line).toLegacyText())
@@ -135,10 +126,7 @@ public class MenuItem {
     }
     
     private <T> T getFrame(List<T> frames, int index, T defaultValue) {
-        if (frames == null || frames.isEmpty()) {
-            return defaultValue;
-        }
-        // The modulo operator ensures the index wraps around correctly.
+        if (frames == null || frames.isEmpty()) return defaultValue;
         return frames.get(index % frames.size());
     }
 }

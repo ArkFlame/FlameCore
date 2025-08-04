@@ -230,10 +230,16 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
 
     private void openExampleMenu(Player player) {
         MenuItem animatedItem = new ItemBuilder(Material.BEACON)
-                .animationInterval(5)
-                .addNameFrame("<#FF5733>&lSpinning Beacon!")
-                .addNameFrame("<#C70039>&lSpinning Beacon!")
-                .addNameFrame("<#900C3F>&lSpinning Beacon!")
+                .animationInterval(2)
+                .addNameFrame("<#FFFFFF>&lB")
+                .addNameFrame("<#FFFFFF>&lBe")
+                .addNameFrame("<#FFFFFF>&lBea")
+                .addNameFrame("<#FFFFFF>&lBeac")
+                .addNameFrame("<#FFFFFF>&lBeaco")
+                .addNameFrame("<#FFFFFF>&lBeacon")
+                .addNameFrame("<#FF5733>&lBeacon")
+                .addNameFrame("<#FFFFFF>&lBeacon")
+                .addNameFrame("<#FF5733>&lBeacon")
                 .addLoreFrame(java.util.Arrays.asList("&7This item has an", "&7animated name color!"))
                 .onClick(e -> LangAPI.getMessage("commands.menu.clicked").send(e.getWhoClicked()))
                 .build();

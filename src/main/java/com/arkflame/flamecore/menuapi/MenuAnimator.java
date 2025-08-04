@@ -1,5 +1,7 @@
 package com.arkflame.flamecore.menuapi;
 
+import org.bukkit.Bukkit;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -7,11 +9,13 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MenuAnimator {
     private final JavaPlugin plugin;
-    private final Map<Player, Menu> openMenus = new ConcurrentHashMap<>();
+    // THE FIX: Store UUID instead of Player to prevent memory leaks and invalid object issues.
+    private final Map<UUID, Menu> openMenus = new ConcurrentHashMap<>();
     private long currentTick = 0;
 
     public MenuAnimator(JavaPlugin plugin) {
@@ -22,13 +26,20 @@ public class MenuAnimator {
         new BukkitRunnable() {
             @Override
             public void run() {
-                // This map will store updates ONLY for inventories that need them.
-                final Map<Inventory, Map<Integer, ItemStack>> syncUpdates = new ConcurrentHashMap<>();
+                // The tick should always increment, regardless of whether menus are open.
+                currentTick++;
+                if (openMenus.isEmpty()) {
+                    return;
+                }
+                
+                final Map<Inventory, Map<Integer, ItemStack>> potentialUpdates = new ConcurrentHashMap<>();
 
-                // Asynchronously calculate all animation frames
-                for (Map.Entry<Player, Menu> entry : openMenus.entrySet()) {
-                    // Skip processing for offline players
-                    if (entry.getKey() == null || !entry.getKey().isOnline()) {
+                // Asynchronously determine which items need to be ticked.
+                for (Map.Entry<UUID, Menu> entry : openMenus.entrySet()) {
+                    Player player = Bukkit.getPlayer(entry.getKey());
+                    
+                    // Safely skip if the player is offline.
+                    if (player == null || !player.isOnline()) {
                         continue;
                     }
 
@@ -36,29 +47,29 @@ public class MenuAnimator {
                     for (Map.Entry<Integer, MenuItem> itemEntry : menu.getItems().entrySet()) {
                         MenuItem menuItem = itemEntry.getValue();
                         
+                        // --- THE CRITICAL FIX FOR THE REPORTED BUG ---
+                        // We now correctly get the item's specific interval every time.
+                        int interval = menuItem.getAnimationInterval();
+                        
                         // Check if it's time for this item's animation to tick.
-                        if (menuItem.isAnimated() && currentTick % menuItem.getAnimationInterval() == 0) {
-                            // The tick() method now only returns a new stack if it's different.
-                            ItemStack newStack = menuItem.tick();
-                            
-                            if (newStack != null) {
-                                // An update is needed. Add it to our map for processing.
-                                syncUpdates.computeIfAbsent(menu.getInventory(), k -> new ConcurrentHashMap<>())
-                                           .put(itemEntry.getKey(), newStack);
-                            }
+                        if (menuItem.isAnimated() && interval > 0 && currentTick % interval == 0) {
+                            // Tick the item to update its internal state to the next frame.
+                            menuItem.tick();
+                            // Add the new state to our map of potential updates.
+                            potentialUpdates.computeIfAbsent(menu.getInventory(), k -> new ConcurrentHashMap<>())
+                                          .put(itemEntry.getKey(), menuItem.getCurrentStack());
                         }
                     }
                 }
 
-                // --- OPTIMIZATION 1 ---
-                // Only schedule the synchronous task if there are actual updates to perform.
-                if (!syncUpdates.isEmpty()) {
+                // If any items were ticked, schedule a synchronous task to apply the visual changes.
+                if (!potentialUpdates.isEmpty()) {
                     new BukkitRunnable() {
                         @Override
                         public void run() {
-                            for (Map.Entry<Inventory, Map<Integer, ItemStack>> updateEntry : syncUpdates.entrySet()) {
+                            for (Map.Entry<Inventory, Map<Integer, ItemStack>> updateEntry : potentialUpdates.entrySet()) {
                                 Inventory inv = updateEntry.getKey();
-                                // Ensure the inventory is still being viewed before updating.
+                                // Double-check viewers to be safe.
                                 if (inv.getViewers().isEmpty()) {
                                     continue;
                                 }
@@ -68,28 +79,32 @@ public class MenuAnimator {
                                     ItemStack newItem = itemUpdate.getValue();
                                     ItemStack currentItem = inv.getItem(slot);
 
-                                    // --- OPTIMIZATION 2 ---
-                                    // Final check: only set the item if the one in the inventory is different.
-                                    // This prevents overriding changes from other plugins or race conditions.
+                                    // The final, authoritative check on the main thread.
                                     if (currentItem == null || !currentItem.isSimilar(newItem)) {
                                         inv.setItem(slot, newItem);
+                                        for (HumanEntity viewer : inv.getViewers()) {
+                                            if (!(viewer instanceof Player)) {
+                                                continue;
+                                            }
+                                            ((Player) viewer).updateInventory();
+                                        }
                                     }
                                 }
                             }
                         }
                     }.runTask(plugin);
                 }
-
-                currentTick++;
             }
-        }.runTaskTimerAsynchronously(plugin, 0L, 1L); // Runs every tick
+        }.runTaskTimerAsynchronously(plugin, 0L, 1L); // Run the main loop every single tick.
     }
-
+    
     public void onMenuOpen(Player player, Menu menu) {
-        openMenus.put(player, menu);
+        // Store by UUID
+        openMenus.put(player.getUniqueId(), menu);
     }
 
     public void onMenuClose(Player player) {
-        openMenus.remove(player);
+        // Remove by UUID
+        openMenus.remove(player.getUniqueId());
     }
 }
