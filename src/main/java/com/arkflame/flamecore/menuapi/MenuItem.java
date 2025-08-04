@@ -21,19 +21,23 @@ public class MenuItem {
     private final List<Material> materialFrames = new ArrayList<>();
     private final List<String> nameFrames = new ArrayList<>();
     private final List<List<String>> loreFrames = new ArrayList<>();
+    // NEW: List to store damage/durability frames.
+    private final List<Short> damageFrames = new ArrayList<>();
     
-    // --- THE FIX: State flags to manage frame initialization ---
     private boolean materialFramesInitialized = false;
     private boolean nameFramesInitialized = false;
     private boolean loreFramesInitialized = false;
+    // NEW: Initialization flag for damage frames.
+    private boolean damageFramesInitialized = false;
     
     private int currentFrame = 0;
     private int animationDirection = 1;
 
     public MenuItem(ItemStack itemStack) {
         this.currentStack = itemStack.clone();
-        // Seed the lists with the initial state.
+        // Seed all frame lists with the initial item's state.
         this.materialFrames.add(itemStack.getType());
+        this.damageFrames.add(itemStack.getDurability());
         ItemMeta meta = itemStack.getItemMeta();
         this.nameFrames.add(meta != null && meta.hasDisplayName() ? meta.getDisplayName() : null);
         this.loreFrames.add(meta != null && meta.hasLore() ? meta.getLore() : new ArrayList<>());
@@ -49,10 +53,8 @@ public class MenuItem {
     public void setClickAction(Consumer<InventoryClickEvent> clickAction) { this.clickAction = clickAction; }
     public void setAnimationInterval(int animationInterval) { this.animationInterval = animationInterval; }
 
-    // --- Animation Frame Management (Completely Reworked) ---
-    
+    // --- Animation Frame Management ---
     public void addMaterialFrame(Material material) {
-        // If this is the first time a custom material frame is added, clear the seed value.
         if (!materialFramesInitialized) {
             materialFrames.clear();
             materialFramesInitialized = true;
@@ -61,7 +63,6 @@ public class MenuItem {
     }
     
     public void addNameFrame(String name) {
-        // If this is the first time a custom name frame is added, clear the seed value.
         if (!nameFramesInitialized) {
             nameFrames.clear();
             nameFramesInitialized = true;
@@ -70,12 +71,31 @@ public class MenuItem {
     }
     
     public void addLoreFrame(List<String> lore) {
-        // If this is the first time a custom lore frame is added, clear the seed value.
         if (!loreFramesInitialized) {
             loreFrames.clear();
             loreFramesInitialized = true;
         }
         loreFrames.add(lore);
+    }
+
+    /**
+     * NEW: Adds a damage value as a frame for animation.
+     * @param damage The damage/durability value.
+     */
+    public void addDamageFrame(short damage) {
+        if (!damageFramesInitialized) {
+            damageFrames.clear();
+            damageFramesInitialized = true;
+        }
+        damageFrames.add(damage);
+    }
+
+    /**
+     * NEW: Clears all damage frames. Used by the ItemBuilder's static .damage() method.
+     */
+    public void clearDamageFrames() {
+        damageFrames.clear();
+        damageFramesInitialized = true; // Mark as initialized so new frames can be added.
     }
     
     public void applyInitialFrame() {
@@ -84,12 +104,9 @@ public class MenuItem {
     
     public void tick() {
         if (!isAnimated()) return;
-
         int totalFrames = getTotalFrames();
         if (totalFrames <= 1) return;
-
         int nextFrameIndex = currentFrame + animationDirection;
-
         if (nextFrameIndex >= totalFrames - 1) {
             nextFrameIndex = totalFrames - 1;
             animationDirection = -1;
@@ -97,36 +114,36 @@ public class MenuItem {
             nextFrameIndex = 0;
             animationDirection = 1;
         }
-        
         this.currentFrame = nextFrameIndex;
         this.currentStack = buildFrame(this.currentFrame);
     }
 
     private int getTotalFrames() {
         int max = 1;
-        // Only consider lists that the user has actually added frames to.
         if (materialFramesInitialized) max = Math.max(max, materialFrames.size());
         if (nameFramesInitialized) max = Math.max(max, nameFrames.size());
         if (loreFramesInitialized) max = Math.max(max, loreFrames.size());
+        if (damageFramesInitialized) max = Math.max(max, damageFrames.size()); // Consider damage frames
         return max;
     }
 
     private ItemStack buildFrame(int frameIndex) {
-        // Use the seeded material as a fallback if no custom material frames were added.
         Material baseMaterial = getFrame(materialFrames, frameIndex, this.materialFrames.get(0));
         if (baseMaterial == null) baseMaterial = Material.AIR;
         
         ItemStack frameStack = new ItemStack(baseMaterial);
         ItemMeta meta = frameStack.getItemMeta();
         
+        // --- THE FIX: Apply the damage value for this frame ---
+        short damage = getFrame(damageFrames, frameIndex, this.damageFrames.get(0));
+        frameStack.setDurability(damage);
+        
         if (meta != null) {
-            // Use the seeded name as a fallback if no custom name frames were added.
             String name = getFrame(nameFrames, frameIndex, this.nameFrames.get(0));
             if (name != null) {
                 meta.setDisplayName(ColorAPI.colorize(name).toLegacyText());
             }
 
-            // Use the seeded lore as a fallback if no custom lore frames were added.
             List<String> lore = getFrame(loreFrames, frameIndex, this.loreFrames.get(0));
             if (lore != null && !lore.isEmpty()) {
                 meta.setLore(lore.stream()
@@ -139,7 +156,6 @@ public class MenuItem {
     }
     
     private <T> T getFrame(List<T> frames, int index, T defaultValue) {
-        // This logic is now more robust. If the user didn't add custom frames, it returns the default.
         if (frames == null || frames.isEmpty()) return defaultValue;
         return frames.get(index % frames.size());
     }

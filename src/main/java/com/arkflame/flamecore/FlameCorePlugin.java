@@ -230,9 +230,9 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                 .register();
     }
 
-    private void openExampleMenu(Player player) {
-        // Construcción del ítem animado con nombre "Beacon" + color alternante
-        MenuItem animatedItem = new ItemBuilder(MaterialAPI.getOrAir("BEACON"))
+    public void openExampleMenu(Player player) {
+        // Animated beacon item
+        ItemBuilder animatedItem = new ItemBuilder(MaterialAPI.getOrAir("BEACON"))
                 .animationInterval(2)
                 .addNameFrame("<#FFFFFF>&lB")
                 .addNameFrame("<#FFFFFF>&lBe")
@@ -244,32 +244,31 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                 .addNameFrame("<#FFFFFF>&lBeacon")
                 .addNameFrame("<#FF5733>&lBeacon")
                 .addLoreFrame(Arrays.asList("&7This item has an", "&7animated name color!"))
-                .onClick(e -> LangAPI.getMessage("commands.menu.clicked").send(e.getWhoClicked()))
-                .build();
+                .onClick(e -> LangAPI.getMessage("commands.menu.clicked").send(e.getWhoClicked()));
 
-        MenuBuilder menu = new MenuBuilder(27, "<#FFC300>Animated Menu Example")
-                .setItem(13, animatedItem); // Centro del menú
-
-        // Posiciones relativas alrededor del centro (posición 13)
-        int[] glassSlots = { 4, 12, 14, 10, 16, 0, 8, 22 };
-        String[] rainbowHex = {
-                "#FF0000", "#FF7F00", "#FFFF00", "#00FF00",
-                "#0000FF", "#4B0082", "#8F00FF", "#FF1493"
+        // Single ItemBuilder for colored glass panes (excluding white and black)
+        ItemBuilder glassItem = new ItemBuilder(MaterialAPI.getOrAir("STAINED_GLASS_PANE", "STAINED_GLASS"))
+                .animationInterval(2)
+                .addNameFrame("<#FFFFFF>&l★");
+        String[] glassColors = {
+                "RED", "ORANGE", "YELLOW", "LIME", "GREEN", "CYAN", "LIGHT_BLUE", "BLUE",
+                "PURPLE", "MAGENTA", "PINK", "BROWN", "GRAY", "LIGHT_GRAY"
         };
+        byte[] legacyData = { 14, 1, 4, 5, 13, 3, 12, 11, 10, 2, 6, 12, 7, 8 }; // 1.8 data values
+        for (int i = 0; i < glassColors.length; i++) {
+            String materialName = glassColors[i] + "_STAINED_GLASS_PANE";
+            glassItem.addMaterialFrame(MaterialAPI.getOrAir(materialName, "STAINED_GLASS"))
+                    .addDamageFrame(legacyData[i]); // Legacy support for 1.8
+        }
 
-        // Crear los 8 bloques de cristal que cambian de color
-        for (int i = 0; i < glassSlots.length; i++) {
-            int slot = glassSlots[i];
-            String hex = rainbowHex[i % rainbowHex.length];
-            ItemBuilder glassItem = new ItemBuilder(MaterialAPI.getOrAir("WHITE_STAINED_GLASS_PANE", "STAINED_GLASS"))
-                    .animationInterval(2)
-                    .addNameFrame("<" + hex + ">&l★")
-                    .addNameFrame("<#FFFFFF>&l★")
-                    .addNameFrame("<" + hex + ">&l★");
+        // Build menu with glass panes in surrounding slots
+        MenuBuilder menu = new MenuBuilder(27, "<#FFC300>Animated Menu Example")
+                .setItem(13, animatedItem.build());
+        int[] glassSlots = { 3, 4, 5, 12, 14, 21, 22, 23 };
+        for (int slot : glassSlots) {
             menu.setItem(slot, glassItem.build());
         }
 
-        // Abrir el menú al jugador
         menu.open(player);
     }
 
