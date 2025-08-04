@@ -1,47 +1,46 @@
 package com.arkflame.flamecore.bossbarapi;
 
-import org.bukkit.entity.Player;
-
 import com.arkflame.flamecore.bossbarapi.bridge.BossBarBridge;
 import com.arkflame.flamecore.bossbarapi.enums.BarColor;
 import com.arkflame.flamecore.bossbarapi.enums.BarStyle;
+import org.bukkit.entity.Player;
 
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.Set;
-import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A modern, fluent API for creating and managing Boss Bars.
  * This API is version-agnostic, working from 1.8 to 1.21+.
- * It automatically uses the native BossBar API on 1.9+ and falls back to a Wither-based
- * implementation on 1.8, hiding all complexity from the user.
- *
- * Example:
- * <pre>{@code
- * BossBarAPI myBar = BossBarAPI.create()
- *          .text("<#FF5733>Server TPS: &a19.9")
- *          .progress(0.99)
- *          .color(BarColor.GREEN);
- *
- * myBar.addPlayer(player);
- * }</pre>
  */
 public class BossBarAPI {
     private final BossBarBridge bridge;
-    private final Set<UUID> players = new HashSet<>();
+    private final Set<Player> players = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private boolean visible = true;
 
-    BossBarAPI() {
-        this.bridge = BossBarManager.createBridge();
+    /**
+     * Internal constructor. A BossBarAPI should be created via the static create()
+     * method.
+     * 
+     * @param bridge The version-specific implementation for this boss bar.
+     */
+    private BossBarAPI(BossBarBridge bridge) {
+        this.bridge = bridge;
     }
 
     /**
      * Creates a new BossBar.
+     * 
      * @return A new BossBarAPI instance.
      */
     public static BossBarAPI create() {
-        return new BossBarAPI();
+        // This is the FIX: We get the bridge first, then create the BossBarAPI. No
+        // recursion.
+        BossBarBridge bridge = BossBarManager.createBridge();
+        BossBarAPI bar = new BossBarAPI(bridge);
+        BossBarManager.addBar(bar);
+        return bar;
     }
 
     public BossBarAPI text(String text) {
@@ -65,14 +64,14 @@ public class BossBarAPI {
     }
 
     public BossBarAPI addPlayer(Player player) {
-        if (players.add(player.getUniqueId())) {
+        if (player != null && players.add(player)) {
             bridge.addPlayer(player);
         }
         return this;
     }
 
     public BossBarAPI removePlayer(Player player) {
-        if (players.remove(player.getUniqueId())) {
+        if (player != null && players.remove(player)) {
             bridge.removePlayer(player);
         }
         return this;
@@ -84,13 +83,10 @@ public class BossBarAPI {
     }
 
     public BossBarAPI removeAll() {
-        new HashSet<>(players).forEach(uuid -> {
-            Player p = org.bukkit.Bukkit.getPlayer(uuid);
-            if (p != null) {
-                removePlayer(p);
-            }
-        });
-        players.clear();
+        // Create a snapshot to avoid ConcurrentModificationException
+        Set<Player> snapshot = ConcurrentHashMap.newKeySet();
+        snapshot.addAll(players);
+        snapshot.forEach(this::removePlayer);
         return this;
     }
 
@@ -104,15 +100,20 @@ public class BossBarAPI {
 
     /**
      * Permanently destroys this boss bar, removing it for all players
-     * and cleaning up any associated resources (like Wither entities on 1.8).
+     * and cleaning up any associated resources.
      */
     public void destroy() {
         removeAll();
         bridge.destroy();
         BossBarManager.removeBar(this);
     }
-    
+
     // Internal methods for the manager
-    Set<UUID> getPlayers() { return players; }
-    BossBarBridge getBridge() { return bridge; }
+    Set<Player> getPlayers() {
+        return players;
+    }
+
+    BossBarBridge getBridge() {
+        return bridge;
+    }
 }
