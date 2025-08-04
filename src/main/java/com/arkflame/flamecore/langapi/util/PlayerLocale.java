@@ -6,19 +6,21 @@ import java.lang.reflect.Method;
 
 /**
  * A highly efficient, version-agnostic utility to get a player's client language.
- * This class is for internal use by the LangAPI.
+ * This class is for internal use by the LangAPI and is designed to be error-free.
  */
 public final class PlayerLocale {
 
     // --- Reflection Caches ---
-    // Caches are populated on the first attempt to use them.
-    private static Method getLocaleMethod;
+    // These are lazily initialized. They will hold the method if found, or be null if not.
+    private static Method getLocaleBukkitMethod;
+    private static Method getLocaleSpigotMethod;
     private static Method getHandleMethod;
-    private static Method getLocaleNMSMethod; // For player.getHandle().getLocale()
+    private static Method getLocaleNMSMethod;
 
-    // A sentinel object to indicate that a reflection attempt has already failed.
-    // This prevents repeated, expensive reflection lookups for methods that don't exist.
-    private static final Object FAILED_LOOKUP = new Object();
+    // Flags to prevent repeated, expensive reflection lookups for methods that don't exist.
+    private static boolean bukkitAttempted = false;
+    private static boolean spigotAttempted = false;
+    private static boolean nmsAttempted = false;
 
     private PlayerLocale() {
         // Private constructor for utility class
@@ -34,56 +36,72 @@ public final class PlayerLocale {
     public static String get(Player player) {
         if (player == null) return null;
 
-        String locale = null;
-
         // --- Method 1: Modern Player#getLocale (1.12+) ---
         // This is the best and most direct method.
-        if (getLocaleMethod == null) {
+        if (!bukkitAttempted) {
             try {
-                getLocaleMethod = Player.class.getMethod("getLocale");
+                getLocaleBukkitMethod = Player.class.getMethod("getLocale");
             } catch (NoSuchMethodException e) {
-                // Method doesn't exist on this version, mark it as failed.
-                getLocaleMethod = (Method) FAILED_LOOKUP;
+                // Method doesn't exist on this version.
             }
+            bukkitAttempted = true;
         }
-        if (getLocaleMethod != FAILED_LOOKUP) {
+        if (getLocaleBukkitMethod != null) {
             try {
-                locale = (String) getLocaleMethod.invoke(player);
+                String locale = (String) getLocaleBukkitMethod.invoke(player);
+                if (isValid(locale)) return clean(locale);
+            } catch (Exception ignored) {}
+        }
+
+        // --- Method 2: Spigot Player.Spigot#getLocale (Common on 1.8-1.11 Spigot forks) ---
+        if (!spigotAttempted) {
+            try {
+                getLocaleSpigotMethod = Player.Spigot.class.getMethod("getLocale");
+            } catch (NoSuchMethodException e) {
+                // Method doesn't exist.
+            }
+            spigotAttempted = true;
+        }
+        if (getLocaleSpigotMethod != null) {
+            try {
+                String locale = (String) getLocaleSpigotMethod.invoke(player.spigot());
+                if (isValid(locale)) return clean(locale);
+            } catch (Exception ignored) {}
+        }
+
+        // --- Method 3: NMS Reflection (Ultimate fallback for CraftBukkit and other versions) ---
+        if (!nmsAttempted) {
+            try {
+                getHandleMethod = player.getClass().getMethod("getHandle");
+                getLocaleNMSMethod = getHandleMethod.getReturnType().getDeclaredField("locale").get(getHandleMethod.invoke(player)).getClass().getMethod("getLanguage");
             } catch (Exception e) {
-                // Invocation failed, should not happen but we'll fall back.
+                // NMS structure is different or doesn't exist.
             }
+            nmsAttempted = true;
+        }
+        if (getHandleMethod != null && getLocaleNMSMethod != null) {
+            try {
+                Object entityPlayer = getHandleMethod.invoke(player);
+                Object localeObject = entityPlayer.getClass().getDeclaredField("locale").get(entityPlayer);
+                String locale = (String) getLocaleNMSMethod.invoke(localeObject);
+                if (isValid(locale)) return clean(locale);
+            } catch (Exception ignored) {}
         }
 
-        // --- Method 2: Reflection on EntityPlayer (Common on older versions) ---
-        if (locale == null || locale.isEmpty()) {
-            if (getHandleMethod == null) {
-                try {
-                    getHandleMethod = player.getClass().getMethod("getHandle");
-                    // Assuming the handle's class is consistent for all players.
-                    getLocaleNMSMethod = getHandleMethod.getReturnType().getMethod("getLocale");
-                } catch (NoSuchMethodException e) {
-                    getHandleMethod = (Method) FAILED_LOOKUP;
-                }
-            }
-            if (getHandleMethod != FAILED_LOOKUP) {
-                try {
-                    Object entityPlayer = getHandleMethod.invoke(player);
-                    locale = (String) getLocaleNMSMethod.invoke(entityPlayer);
-                } catch (Exception e) {
-                    // Fallback if this method also fails.
-                }
-            }
-        }
-        
-        // If a locale was found, clean it up and return the language part.
-        if (locale != null && !locale.isEmpty()) {
-            // "en_US" -> "en"
-            String[] parts = locale.split("_");
-            if (parts.length > 0) {
-                return parts[0].toLowerCase();
-            }
-        }
+        return null; // Could not determine locale through any method.
+    }
 
-        return null; // Could not determine locale.
+    /**
+     * Cleans a locale string like "en_US" to just its language code "en".
+     */
+    private static String clean(String locale) {
+        return locale.split("_")[0].toLowerCase();
+    }
+
+    /**
+     * Checks if a retrieved locale string is valid.
+     */
+    private static boolean isValid(String locale) {
+        return locale != null && !locale.isEmpty();
     }
 }
