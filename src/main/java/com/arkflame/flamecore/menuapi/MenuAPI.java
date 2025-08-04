@@ -23,6 +23,7 @@ public class MenuAPI {
 
         // Register the necessary event listeners
         Bukkit.getPluginManager().registerEvents(new MenuListener(animator), plugin);
+        Bukkit.getPluginManager().registerEvents(new MenuSwapListener(), plugin);
     }
 
     static MenuAnimator getAnimator() {
