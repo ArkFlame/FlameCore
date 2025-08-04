@@ -1,13 +1,13 @@
 package com.arkflame.flamecore.langapi;
 
+import com.arkflame.flamecore.configapi.Config;
+import com.arkflame.flamecore.configapi.ConfigAPI;
 import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import com.arkflame.flamecore.configapi.Config;
-import com.arkflame.flamecore.configapi.ConfigAPI;
-
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -29,7 +29,8 @@ public class LangMessage {
      * @return The current LangMessage instance for chaining.
      */
     public LangMessage with(String key, Object value) {
-        this.placeholders.put("{" + key + "}", String.valueOf(value));
+        // Ensure the key is wrapped with {} for consistent replacement
+        this.placeholders.put("{" + key.replace("{", "").replace("}", "") + "}", String.valueOf(value));
         return this;
     }
 
@@ -46,7 +47,7 @@ public class LangMessage {
         message = applyPlaceholders(message);
         
         // Apply PAPI placeholders if available
-        if (LangAPI.isPapiEnabled()) {
+        if (LangAPI.isPapiEnabled() && player != null) {
             message = PlaceholderAPI.setPlaceholders(player, message);
         }
         
@@ -76,18 +77,31 @@ public class LangMessage {
         }
     }
 
+    /**
+     * Fetches the message from the config, intelligently handling both String and List<String>.
+     * @param lang The language code to use.
+     * @return A single, newline-joined string.
+     */
     private String getRawMessage(String lang) {
-        // Use our ConfigAPI to get the correct language file.
         Config langConfig = ConfigAPI.getConfig("lang/" + lang + ".yml");
-        String message = langConfig.getString(key);
         
-        // Fallback to default language if message is not found in the player's language
-        if (message == null) {
+        // Check if the path exists at all.
+        if (!langConfig.contains(key)) {
+            // Fallback to default language if the key isn't in the primary language file.
             Config defaultConfig = ConfigAPI.getConfig("lang/" + LangAPI.getDefaultLanguage() + ".yml");
-            message = defaultConfig.getString(key, "&cMissing message key: " + key + " in " + lang + ".yml");
+            if (!defaultConfig.contains(key)) {
+                return "&cMissing message key: " + key;
+            }
+            langConfig = defaultConfig;
         }
-        
-        return message;
+
+        // Now, check if the value at the path is a list or a single string.
+        if (langConfig.getRaw().isList(key)) {
+            List<String> lines = langConfig.getStringList(key); // Our ConfigAPI automatically colors this list.
+            return String.join("\n", lines);
+        } else {
+            return langConfig.getString(key); // Already colored by ConfigAPI.
+        }
     }
 
     private String applyPlaceholders(String message) {
