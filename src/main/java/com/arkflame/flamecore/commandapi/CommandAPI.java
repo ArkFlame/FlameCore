@@ -8,7 +8,7 @@ public class CommandAPI {
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("CommandAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
         commandHandler = new CommandHandler(plugin);

@@ -13,7 +13,7 @@ public class MenuAPI {
      */
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("MenuAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
 

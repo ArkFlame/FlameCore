@@ -25,7 +25,7 @@ public final class LangAPI {
      */
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("LangAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
         // Ensure ConfigAPI is initialized as we depend on it.

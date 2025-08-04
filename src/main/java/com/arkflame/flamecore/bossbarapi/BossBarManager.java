@@ -25,7 +25,7 @@ public class BossBarManager {
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("BossBarManager is already initialized.");
+            return;
         }
         plugin = pluginInstance;
 

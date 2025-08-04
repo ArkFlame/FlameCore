@@ -16,7 +16,7 @@ public final class ConfigAPI {
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("ConfigAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
     }

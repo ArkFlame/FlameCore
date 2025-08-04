@@ -29,7 +29,7 @@ public final class SchematicAPI {
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("SchematicAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
         // Ensure dependent APIs are initialized.

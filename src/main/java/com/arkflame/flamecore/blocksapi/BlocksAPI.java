@@ -27,7 +27,7 @@ public final class BlocksAPI {
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("BlocksAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
 

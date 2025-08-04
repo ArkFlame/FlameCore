@@ -20,7 +20,7 @@ public final class FakeBlocksAPI {
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            throw new IllegalStateException("FakeBlocksAPI is already initialized.");
+            return;
         }
         plugin = pluginInstance;
         plugin.getServer().getPluginManager().registerEvents(new FakeBlockListener(), plugin);
