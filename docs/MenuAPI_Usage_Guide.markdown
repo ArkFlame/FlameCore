@@ -18,8 +18,8 @@ public void onEnable() {
 Use `MenuBuilder` to define the size and title, then `.open()` it for a player.
 
 ```java
-import com.arkflame.core.menuapi.MenuBuilder;
-import com.arkflame.core.menuapi.ItemBuilder;
+import com.arkflame.flamecore.menuapi.MenuBuilder;
+import com.arkflame.flamecore.menuapi.ItemBuilder;
 import org.bukkit.Material;
 
 new MenuBuilder(27, "&8My First Menu")

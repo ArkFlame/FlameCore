@@ -1,5 +1,6 @@
 package com.arkflame.flamecore.colorapi;
 
+import com.arkflame.flamecore.colorapi.util.ColorWrapper;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.*;
 import org.bukkit.command.CommandSender;
@@ -14,16 +15,9 @@ import java.util.stream.Collectors;
 
 /**
  * A self-contained, fluent API for creating and sending rich text messages.
- * This API supports legacy codes (&c), hex codes (&#RRGGBB), and gradients (<#start>text</#end>).
- * It produces BungeeCord/Spigot chat components without external dependencies like Adventure.
- *
- * Example:
- * <pre>{@code
- * ColorAPI.colorize("<#55C1FF>Welcome to <#FFAA00>My Server&r&l! &#FFA500Check out our store.")
- *         .onHover("&eClick to visit our website!")
- *         .onClick(ClickAction.OPEN_URL, "https://store.example.com")
- *         .send(player);
- * }</pre>
+ * This API is fully version-agnostic (1.8-1.21+).
+ * Hex codes are supported on modern servers and gracefully degrade to the nearest
+ * legacy color on older servers.
  */
 public class ColorAPI {
     // Combined pattern for all special formats we handle.
@@ -48,21 +42,21 @@ public class ColorAPI {
     }
 
     public ColorAPI append(String text) {
-        if (text == null || text.isEmpty()) {
-            return this;
+        if (text != null && !text.isEmpty()) {
+            this.components.addAll(parse(text));
         }
-        this.components.addAll(parse(text));
         return this;
     }
 
     public ColorAPI append(ColorAPI other) {
-        this.components.addAll(other.components);
+        if (other != null) {
+            this.components.addAll(other.components);
+        }
         return this;
     }
 
     public ColorAPI onHover(HoverAction action, ColorAPI content) {
         if (!components.isEmpty()) {
-            // Apply to all components created in the last append call
             getLastAppendedGroup().forEach(c -> c.setHoverEvent(new HoverEvent(
                 action.toBungee(),
                 content.toBungeeComponents()
@@ -85,15 +79,10 @@ public class ColorAPI {
         return this;
     }
     
-    /**
-     * Finds all components that were part of the last logical block (word or formatted segment).
-     * This makes hover/click events apply to whole colored words, not just the last letter.
-     */
     private List<InternalTextComponent> getLastAppendedGroup() {
         if (components.isEmpty()) {
             return new ArrayList<>();
         }
-        // A "group" is a sequence of components without spaces that share the same hover/click events.
         int lastIndex = components.size() - 1;
         InternalTextComponent last = components.get(lastIndex);
         HoverEvent h = last.getHoverEvent();
@@ -104,7 +93,7 @@ public class ColorAPI {
             InternalTextComponent current = components.get(i);
             if (current.getHoverEvent() == h && current.getClickEvent() == c) {
                 group.add(current);
-                if (current.getText().contains(" ")) { // Stop at spaces
+                if (current.getText().contains(" ")) {
                     break;
                 }
             } else {
@@ -130,50 +119,36 @@ public class ColorAPI {
         return components.stream().map(InternalTextComponent::toBungee).toArray(BaseComponent[]::new);
     }
 
-    // --- The New Parsing Engine ---
-
     private static List<InternalTextComponent> parse(String text) {
         List<InternalTextComponent> components = new ArrayList<>();
         Matcher matcher = FORMATTING_PATTERN.matcher(text);
-
         TextColorizer state = new TextColorizer();
         int lastMatchEnd = 0;
 
         while (matcher.find()) {
             int start = matcher.start();
-            // 1. Append any plain text before this match
             if (start > lastMatchEnd) {
                 state.appendText(text.substring(lastMatchEnd, start), components);
             }
 
             String match = matcher.group();
-
-            // 2. Process the matched code
-            if (match.startsWith("<#") && !match.startsWith("</#")) { // Gradient Start
-                state.beginGradient(ChatColor.of("#" + matcher.group(1)));
-            } else if (match.startsWith("</#")) { // Gradient End
-                state.endGradient(ChatColor.of("#" + matcher.group(2)));
-            } else if (match.startsWith("&#")) { // Single Hex
-                state.setColor(ChatColor.of("#" + matcher.group(3)));
-            } else { // Legacy Code
+            if (match.startsWith("<#") && !match.startsWith("</#")) {
+                state.beginGradient(new ColorWrapper(new Color(Integer.parseInt(matcher.group(1), 16))));
+            } else if (match.startsWith("</#")) {
+                state.endGradient(new ColorWrapper(new Color(Integer.parseInt(matcher.group(2), 16))));
+            } else if (match.startsWith("&#")) {
+                state.setColor(new ColorWrapper(new Color(Integer.parseInt(matcher.group(3), 16))));
+            } else {
                 state.applyLegacyCode(ChatColor.getByChar(match.charAt(1)));
             }
-
             lastMatchEnd = matcher.end();
         }
-
-        // 3. Append any remaining text after the last match
         if (lastMatchEnd < text.length()) {
             state.appendText(text.substring(lastMatchEnd), components);
         }
-
         return components;
     }
 
-    /**
-     * Interpolates between two colors.
-     * @param factor A value from 0.0 to 1.0.
-     */
     private static Color interpolate(Color color1, Color color2, float factor) {
         int r = (int) (color1.getRed() + factor * (color2.getRed() - color1.getRed()));
         int g = (int) (color1.getGreen() + factor * (color2.getGreen() - color1.getGreen()));
@@ -181,92 +156,79 @@ public class ColorAPI {
         return new Color(r, g, b);
     }
 
-    /**
-     * Inner class to manage the state of the text parser.
-     */
     private static class TextColorizer {
-        private ChatColor color = ChatColor.WHITE;
+        private ColorWrapper color = new ColorWrapper(ChatColor.WHITE);
         private boolean bold, italic, underlined, strikethrough, magic;
-
-        private ChatColor gradientStart, gradientEnd;
+        private ColorWrapper gradientStart, gradientEnd;
         private boolean inGradient = false;
 
-        void setColor(ChatColor color) {
+        void setColor(ColorWrapper color) {
             if (!inGradient) {
                 this.color = color;
                 resetFormatting();
             }
         }
-        
-        private char getChatCode(ChatColor color) {
-            return color.toString().charAt(1);
-        }
 
+        /**
+         * Correctly handles legacy codes based on their character, not their properties.
+         * This version is compatible with ChatColor as a class.
+         */
         void applyLegacyCode(ChatColor code) {
-            if (code == null) {
-                return;
-            }
+            if (code == null) return;
+            
+            // This is the definitive, safe way to check for a color code.
+            char codeChar = code.toString().charAt(1);
+            boolean isColor = (codeChar >= '0' && codeChar <= '9') || (codeChar >= 'a' && codeChar <= 'f');
 
-            char codeChar = getChatCode(code);
-
-            if ((codeChar >= '0' && codeChar <= '9') || (codeChar >= 'a' && codeChar <= 'f')) {
-                setColor(code);
-            } else {
-                if (code == ChatColor.BOLD) {
+            if (isColor) {
+                setColor(new ColorWrapper(code));
+            } else { // It's a formatting code.
+                // We must use if/else if because ChatColor is not an enum.
+                if (code.equals(ChatColor.BOLD)) {
                     bold = true;
-                } else if (code == ChatColor.ITALIC) {
+                } else if (code.equals(ChatColor.ITALIC)) {
                     italic = true;
-                } else if (code == ChatColor.UNDERLINE) {
+                } else if (code.equals(ChatColor.UNDERLINE)) {
                     underlined = true;
-                } else if (code == ChatColor.STRIKETHROUGH) {
+                } else if (code.equals(ChatColor.STRIKETHROUGH)) {
                     strikethrough = true;
-                } else if (code == ChatColor.MAGIC) {
+                } else if (code.equals(ChatColor.MAGIC)) {
                     magic = true;
-                } else if (code == ChatColor.RESET) {
-                    this.color = null;
+                } else if (code.equals(ChatColor.RESET)) {
+                    this.color = new ColorWrapper(ChatColor.WHITE);
                     resetFormatting();
                     this.inGradient = false;
                 }
             }
         }
 
-        void beginGradient(ChatColor start) {
-            this.inGradient = true;
-            this.gradientStart = start;
-        }
-
-        void endGradient(ChatColor end) {
-            this.gradientEnd = end;
-        }
+        void beginGradient(ColorWrapper start) { this.inGradient = true; this.gradientStart = start; }
+        void endGradient(ColorWrapper end) { this.gradientEnd = end; }
 
         void appendText(String text, List<InternalTextComponent> components) {
             if (inGradient) {
-                // If the end tag wasn't found yet, assume it's the start color
-                ChatColor finalEndColor = (gradientEnd != null) ? gradientEnd : gradientStart;
-
+                ColorWrapper finalEndColor = (gradientEnd != null) ? gradientEnd : gradientStart;
                 Color start = gradientStart.getColor();
                 Color end = finalEndColor.getColor();
                 String cleanText = ChatColor.stripColor(text);
                 int len = cleanText.length();
-                
                 for (int i = 0; i < len; i++) {
                     float factor = (len > 1) ? (float) i / (len - 1) : 0;
                     Color interpolated = interpolate(start, end, factor);
-                    ChatColor charColor = ChatColor.of(interpolated);
                     components.add(new InternalTextComponent(
-                            String.valueOf(cleanText.charAt(i)), charColor, bold, italic, underlined, strikethrough, magic));
+                        String.valueOf(cleanText.charAt(i)), new ColorWrapper(interpolated), 
+                        bold, italic, underlined, strikethrough, magic)
+                    );
                 }
-                
-                // Reset gradient state after processing
                 inGradient = false;
                 gradientStart = null;
                 gradientEnd = null;
             } else {
                 components.add(new InternalTextComponent(
-                        text, color, bold, italic, underlined, strikethrough, magic));
+                    text, color, bold, italic, underlined, strikethrough, magic));
             }
         }
-
+        
         private void resetFormatting() {
             bold = italic = underlined = strikethrough = magic = false;
         }

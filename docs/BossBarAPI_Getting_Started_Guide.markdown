@@ -7,7 +7,7 @@ The `BossBarAPI` allows creating and managing boss bars in Spigot/BungeeCord, su
 Initialize the `BossBarManager` in your plugin's `onEnable` method.
 
 ```java
-import com.arkflame.core.bossbarapi.BossBarManager;
+import com.arkflame.flamecore.bossbarapi.BossBarManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyPlugin extends JavaPlugin {
@@ -23,9 +23,9 @@ public class MyPlugin extends JavaPlugin {
 Create a boss bar with text, progress, color, and style, then add a player to it.
 
 ```java
-import com.arkflame.core.bossbarapi.BossBarAPI;
-import com.arkflame.core.bossbarapi.enums.BarColor;
-import com.arkflame.core.bossbarapi.enums.BarStyle;
+import com.arkflame.flamecore.bossbarapi.BossBarAPI;
+import com.arkflame.flamecore.bossbarapi.enums.BarColor;
+import com.arkflame.flamecore.bossbarapi.enums.BarStyle;
 import org.bukkit.entity.Player;
 
 Player somePlayer = // ... get your player object

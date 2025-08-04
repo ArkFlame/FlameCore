@@ -7,7 +7,7 @@ The `SchematicAPI` provides a robust interface for saving, loading, and pasting 
 Initialize the `SchematicAPI` in your plugin's `onEnable` method to set up the API and optionally restore schematics from a folder.
 
 ```java
-import com.arkflame.core.schematicapi.SchematicAPI;
+import com.arkflame.flamecore.schematicapi.SchematicAPI;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 

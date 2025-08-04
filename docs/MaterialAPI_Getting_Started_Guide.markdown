@@ -7,7 +7,7 @@ The `MaterialAPI` provides a simple and safe way to handle materials in Spigot/B
 Use `getOrAir` to retrieve a material by providing a list of possible names, starting with legacy names for older versions, ensuring the first valid material is returned.
 
 ```java
-import com.arkflame.core.materialapi.MaterialAPI;
+import com.arkflame.flamecore.materialapi.MaterialAPI;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 

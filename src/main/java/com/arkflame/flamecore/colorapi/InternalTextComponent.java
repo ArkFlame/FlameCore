@@ -1,20 +1,26 @@
 package com.arkflame.flamecore.colorapi;
 
+import com.arkflame.flamecore.colorapi.util.ColorWrapper;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 
+/**
+ * Internal representation of a single, styled piece of text.
+ * This is not meant for direct use; it's a data carrier for the ColorAPI that
+ * uses the version-agnostic ColorWrapper.
+ */
 class InternalTextComponent {
     private final String text;
-    private final ChatColor color;
+    private final ColorWrapper color;
     private final boolean bold, italic, underlined, strikethrough, magic;
 
     private HoverEvent hoverEvent;
     private ClickEvent clickEvent;
-    
-    InternalTextComponent(String text, ChatColor color, boolean bold, boolean italic, boolean underlined, boolean strikethrough, boolean magic) {
+
+    InternalTextComponent(String text, ColorWrapper color, boolean bold, boolean italic, boolean underlined, boolean strikethrough, boolean magic) {
         this.text = text;
         this.color = color;
         this.bold = bold;
@@ -24,17 +30,22 @@ class InternalTextComponent {
         this.magic = magic;
     }
 
+    // Getters and setters for internal use by ColorAPI
     String getText() { return text; }
     HoverEvent getHoverEvent() { return hoverEvent; }
     ClickEvent getClickEvent() { return clickEvent; }
-    
     void setHoverEvent(HoverEvent hoverEvent) { this.hoverEvent = hoverEvent; }
     void setClickEvent(ClickEvent clickEvent) { this.clickEvent = clickEvent; }
 
+    /**
+     * Converts this internal component into a BungeeCord BaseComponent for sending to a player.
+     * @return A BaseComponent representing this piece of text.
+     */
     BaseComponent toBungee() {
         TextComponent component = new TextComponent(text);
         if (color != null) {
-            component.setColor(color);
+            // Use the wrapper to get the correct Bungee ChatColor for the current server version.
+            component.setColor(color.toBungee());
         }
         component.setBold(bold);
         component.setItalic(italic);
@@ -47,10 +58,16 @@ class InternalTextComponent {
         return component;
     }
 
+    /**
+     * Converts this component into a legacy string with '§' color codes.
+     * This is now version-agnostic for hex colors.
+     * @return A plain string with legacy formatting.
+     */
     String toLegacyText() {
         StringBuilder sb = new StringBuilder();
         if (color != null) {
-            sb.append(color);
+            // Use the wrapper to get the correct legacy string representation.
+            sb.append(color.toLegacyString());
         }
         if (bold) sb.append(ChatColor.BOLD);
         if (italic) sb.append(ChatColor.ITALIC);

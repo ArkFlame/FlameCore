@@ -7,7 +7,7 @@ The `ConfigAPI` provides a clean, centralized interface for managing configurati
 Initialize the `ConfigAPI` in your plugin's `onEnable` method to set up configuration file management.
 
 ```java
-import com.arkflame.core.configapi.ConfigAPI;
+import com.arkflame.flamecore.configapi.ConfigAPI;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyPlugin extends JavaPlugin {
@@ -27,7 +27,7 @@ public class MyPlugin extends JavaPlugin {
 Access configuration values in a single line using the `ConfigAPI` to retrieve a `Config` object.
 
 ```java
-import com.arkflame.core.configapi.Config;
+import com.arkflame.flamecore.configapi.Config;
 import java.util.List;
 
 Config mainConfig = ConfigAPI.getConfig("config.yml");

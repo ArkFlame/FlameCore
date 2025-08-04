@@ -7,7 +7,7 @@ The `FakeBlocksAPI` enables Spigot/BungeeCord plugins to send per-player "fake" 
 Initialize the `FakeBlocksAPI` in your plugin's `onEnable` method to set up listeners and tasks.
 
 ```java
-import com.arkflame.core.fakeblocksapi.FakeBlocksAPI;
+import com.arkflame.flamecore.fakeblocksapi.FakeBlocksAPI;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyPlugin extends JavaPlugin {
@@ -23,8 +23,8 @@ public class MyPlugin extends JavaPlugin {
 Use the fluent `FakeBlock.builder()` to create and send a fake block to a specific player at a given location, using `MaterialAPI` to select materials safely across Minecraft versions.
 
 ```java
-import com.arkflame.core.fakeblocksapi.FakeBlock;
-import com.arkflame.core.materialapi.MaterialAPI;
+import com.arkflame.flamecore.fakeblocksapi.FakeBlock;
+import com.arkflame.flamecore.materialapi.MaterialAPI;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;

@@ -26,8 +26,8 @@ Replace `${mysql.version}` and `${hikaricp.version}` with the latest versions (e
 Initialize the `MySQLAPI` in your plugin's `onEnable` method, providing database connection details.
 
 ```java
-import com.arkflame.core.mysqlapi.MySQLAPI;
-import com.arkflame.core.mysqlapi.MySQLConfig;
+import com.arkflame.flamecore.mysqlapi.MySQLAPI;
+import com.arkflame.flamecore.mysqlapi.MySQLConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyMySQLPlugin extends JavaPlugin {
@@ -58,9 +58,9 @@ public class MyMySQLPlugin extends JavaPlugin {
 Create a data class to represent the data you want to store, using annotations to define the table structure.
 
 ```java
-import com.arkflame.core.mysqlapi.annotations.PrimaryKey;
-import com.arkflame.core.mysqlapi.annotations.StoreAsTable;
-import com.arkflame.core.mysqlapi.annotations.Transient;
+import com.arkflame.flamecore.mysqlapi.annotations.PrimaryKey;
+import com.arkflame.flamecore.mysqlapi.annotations.StoreAsTable;
+import com.arkflame.flamecore.mysqlapi.annotations.Transient;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -139,8 +139,8 @@ public class PlayerListener implements Listener {
 Create a command to query player statistics, demonstrating how to retrieve data by ID or field.
 
 ```java
-import com.arkflame.core.commandapi.Command;
-import com.arkflame.core.commandapi.sender.SenderType;
+import com.arkflame.flamecore.commandapi.Command;
+import com.arkflame.flamecore.commandapi.sender.SenderType;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import java.text.SimpleDateFormat;

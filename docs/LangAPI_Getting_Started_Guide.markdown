@@ -50,7 +50,7 @@ success:
 Initialize the `LangAPI` in your plugin's `onEnable` method to load language files.
 
 ```java
-import com.arkflame.core.langapi.LangAPI;
+import com.arkflame.flamecore.langapi.LangAPI;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyPlugin extends JavaPlugin {
@@ -70,7 +70,7 @@ Send messages with placeholders to players using a single, fluent line.
 ### Example: Simple Message
 
 ```java
-import com.arkflame.core.langapi.LangAPI;
+import com.arkflame.flamecore.langapi.LangAPI;
 import org.bukkit.entity.Player;
 
 Player player = // ... get player

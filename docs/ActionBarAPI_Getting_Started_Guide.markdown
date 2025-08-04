@@ -7,7 +7,7 @@ The `ActionBarAPI` enables sending single-line messages above the player's hotba
 Create and send a simple action bar message.
 
 ```java
-import com.arkflame.core.actionbarapi.ActionBarAPI;
+import com.arkflame.flamecore.actionbarapi.ActionBarAPI;
 import org.bukkit.entity.Player;
 
 Player player = // ... get your player object

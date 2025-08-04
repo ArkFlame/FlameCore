@@ -26,8 +26,8 @@ Replace `${sqlite.version}` and `${hikaricp.version}` with the latest versions (
 Initialize the `SQLiteAPI` in your plugin's `onEnable` method, specifying the database file name.
 
 ```java
-import com.arkflame.core.sqliteapi.SQLiteAPI;
-import com.arkflame.core.sqliteapi.SQLiteConfig;
+import com.arkflame.flamecore.sqliteapi.SQLiteAPI;
+import com.arkflame.flamecore.sqliteapi.SQLiteConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MySQLitePlugin extends JavaPlugin {
@@ -58,9 +58,9 @@ public class MySQLitePlugin extends JavaPlugin {
 Create a data class to represent the data you want to store, using annotations to define the table structure.
 
 ```java
-import com.arkflame.core.sqliteapi.annotations.PrimaryKey;
-import com.arkflame.core.sqliteapi.annotations.StoreAsTable;
-import com.arkflame.core.sqliteapi.annotations.Transient;
+import com.arkflame.flamecore.sqliteapi.annotations.PrimaryKey;
+import com.arkflame.flamecore.sqliteapi.annotations.StoreAsTable;
+import com.arkflame.flamecore.sqliteapi.annotations.Transient;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -139,8 +139,8 @@ public class PlayerListener implements Listener {
 Create a command to query player statistics, demonstrating how to retrieve data by ID or field.
 
 ```java
-import com.arkflame.core.commandapi.Command;
-import com.arkflame.core.commandapi.sender.SenderType;
+import com.arkflame.flamecore.commandapi.Command;
+import com.arkflame.flamecore.commandapi.sender.SenderType;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import java.text.SimpleDateFormat;

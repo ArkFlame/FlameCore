@@ -7,7 +7,7 @@ The `CommandAPI` provides a fluent, builder-style interface for creating command
 Initialize the `CommandAPI` in your plugin's `onEnable` method to set up command registration.
 
 ```java
-import com.arkflame.core.commandapi.CommandAPI;
+import com.arkflame.flamecore.commandapi.CommandAPI;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyPlugin extends JavaPlugin {
@@ -23,8 +23,8 @@ public class MyPlugin extends JavaPlugin {
 Define a basic command with its logic and register it.
 
 ```java
-import com.arkflame.core.commandapi.Command;
-import com.arkflame.core.commandapi.sender.SenderType;
+import com.arkflame.flamecore.commandapi.Command;
+import com.arkflame.flamecore.commandapi.sender.SenderType;
 
 Command.create("heal")
     .setDescription("Heals the player.")
@@ -104,9 +104,9 @@ Command.create("gmc")
 Create a command that sets a block at the player's target location, using `MaterialAPI` for version-agnostic material selection.
 
 ```java
-import com.arkflame.core.commandapi.Command;
-import com.arkflame.core.commandapi.sender.SenderType;
-import com.arkflame.core.materialapi.MaterialAPI;
+import com.arkflame.flamecore.commandapi.Command;
+import com.arkflame.flamecore.commandapi.sender.SenderType;
+import com.arkflame.flamecore.materialapi.MaterialAPI;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;

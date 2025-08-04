@@ -7,7 +7,7 @@ The `ColorAPI` provides a powerful and fluent interface for composing rich text 
 Create a message by chaining multiple text segments with different formatting using `ColorAPI.create()` and `.append(String)`.
 
 ```java
-import com.arkflame.core.colorapi.ColorAPI;
+import com.arkflame.flamecore.colorapi.ColorAPI;
 import org.bukkit.entity.Player;
 
 Player player = // ... get player
@@ -42,8 +42,8 @@ finalMessage.send(player);
 Build a complex, interactive teleport request by creating separate components for text and clickable buttons, then combining them.
 
 ```java
-import com.arkflame.core.colorapi.ColorAPI;
-import com.arkflame.core.colorapi.ClickAction;
+import com.arkflame.flamecore.colorapi.ColorAPI;
+import com.arkflame.flamecore.colorapi.ClickAction;
 
 Player requester = // ... get requester
 Player target = // ... get target

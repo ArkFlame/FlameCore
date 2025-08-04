@@ -7,7 +7,7 @@ The `BlocksAPI` provides a version-agnostic, asynchronous interface for capturin
 Initialize the `BlocksAPI` in your plugin's `onEnable` method to set up version detection and the block processing queue.
 
 ```java
-import com.arkflame.core.blocksapi.BlocksAPI;
+import com.arkflame.flamecore.blocksapi.BlocksAPI;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyPlugin extends JavaPlugin {
@@ -23,8 +23,8 @@ public class MyPlugin extends JavaPlugin {
 Asynchronously capture a block's state using `getBlockAsync`, which returns a `CompletableFuture<BlockWrapper>` containing all necessary data for restoration.
 
 ```java
-import com.arkflame.core.blocksapi.BlocksAPI;
-import com.arkflame.core.blocksapi.BlockWrapper;
+import com.arkflame.flamecore.blocksapi.BlocksAPI;
+import com.arkflame.flamecore.blocksapi.BlockWrapper;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
@@ -43,7 +43,7 @@ BlocksAPI.getBlockAsync(targetLocation).thenAccept(blockWrapper -> {
 Use `setBlock` to restore a block's state at a specified location, leveraging the saved `BlockWrapper` for accurate placement.
 
 ```java
-import com.arkflame.core.blocksapi.BlockWrapper;
+import com.arkflame.flamecore.blocksapi.BlockWrapper;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -91,8 +91,8 @@ public class WandListener implements Listener {
 Serialize a `BlockWrapper` to a string for persistent storage (e.g., in a file or database) and restore it later, ensuring perfect block state restoration even after a server restart.
 
 ```java
-import com.arkflame.core.blocksapi.BlocksAPI;
-import com.arkflame.core.blocksapi.BlockWrapper;
+import com.arkflame.flamecore.blocksapi.BlocksAPI;
+import com.arkflame.flamecore.blocksapi.BlockWrapper;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;

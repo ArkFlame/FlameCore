@@ -7,7 +7,7 @@ The `TitleAPI` provides a fluent interface for sending main titles and subtitles
 Create and send a simple title with default fade-in, stay, and fade-out timings.
 
 ```java
-import com.arkflame.core.titleapi.TitleAPI;
+import com.arkflame.flamecore.titleapi.TitleAPI;
 import org.bukkit.entity.Player;
 
 Player player = // ... get your player object
