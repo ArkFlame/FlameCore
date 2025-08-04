@@ -13,25 +13,31 @@ import java.lang.reflect.Method;
 /**
  * Internal helper to send action bar packets.
  * This class handles all NMS/Reflection logic to maintain compatibility.
- * It intelligently uses modern Spigot APIs first if available.
+ * It intelligently detects the server version to use the best available method.
  */
 class ActionBarPacketSender {
-    // Caches for reflection
+
+    // --- Caches ---
+    private static boolean useModernApi;
+
+    // Reflection caches for NMS (Legacy)
     private static Method getHandleMethod;
     private static Method sendPacketMethod;
     private static Field playerConnectionField;
     private static Constructor<?> packetPlayOutChatConstructor;
     private static Method chatSerializerMethod;
 
-    private static boolean useSpigotAPI = true;
-
     static {
-        // We assume the Spigot API exists. If it throws an error, we switch to reflection.
+        // This static block runs once to determine the best method to send action bars.
         try {
-            ChatMessageType.ACTION_BAR.getClass(); // This will throw NoClassDefFoundError on old versions
+            // Attempt to find the modern Spigot API method.
+            // This is the most reliable check for 1.10+ servers.
+            Player.Spigot.class.getMethod("sendMessage", ChatMessageType.class, BaseComponent[].class);
+            useModernApi = true;
         } catch (Throwable e) {
-            useSpigotAPI = false;
-            // Spigot API not found, fall back to NMS reflection.
+            // A NoClassDefFoundError or NoSuchMethodError means we're on an older version.
+            useModernApi = false;
+            // Now, we MUST initialize the NMS reflection as a fallback.
             try {
                 String nmsVersion = Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3];
                 Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + nmsVersion + ".entity.CraftPlayer");
@@ -46,53 +52,52 @@ class ActionBarPacketSender {
 
                 Class<?> iChatBaseComponentClass = Class.forName("net.minecraft.server." + nmsVersion + ".IChatBaseComponent");
                 Class<?> packetPlayOutChatClass = Class.forName("net.minecraft.server." + nmsVersion + ".PacketPlayOutChat");
-                
-                // Constructor for 1.8.8+
-                try {
-                    packetPlayOutChatConstructor = packetPlayOutChatClass.getConstructor(iChatBaseComponentClass, byte.class);
-                } catch (NoSuchMethodException ex) {
-                    // Constructor for 1.16+
-                    packetPlayOutChatConstructor = packetPlayOutChatClass.getConstructor(iChatBaseComponentClass, ChatMessageType.class);
-                }
+
+                // This is the key constructor for 1.8 action bars.
+                packetPlayOutChatConstructor = packetPlayOutChatClass.getConstructor(iChatBaseComponentClass, byte.class);
                 
                 chatSerializerMethod = iChatBaseComponentClass.getDeclaredClasses()[0].getMethod("a", String.class);
                 
             } catch (Exception ex) {
+                System.err.println("Could not initialize NMS reflection for ActionBarAPI. Action bars may not work on this version.");
                 ex.printStackTrace();
             }
         }
     }
 
     static void send(Player player, BaseComponent[] message) {
-        if (useSpigotAPI) {
+        if (useModernApi) {
             // Use the modern, safe, and efficient Spigot API.
             player.spigot().sendMessage(ChatMessageType.ACTION_BAR, message);
-            return;
-        }
-
-        // Fallback to NMS reflection for older versions (pre 1.10)
-        try {
-            Object chatComponent = chatSerializerMethod.invoke(null, ComponentSerializer.toString(message));
-            
-            // The constructor signature changed over time, we handle both common cases.
-            Object packet;
-            if (packetPlayOutChatConstructor.getParameterCount() == 2 && packetPlayOutChatConstructor.getParameterTypes()[1] == byte.class) {
-                packet = packetPlayOutChatConstructor.newInstance(chatComponent, (byte) 2);
-            } else {
-                // This path is for newer reflection logic if needed, but spigot API should cover it.
-                // For safety, we just don't send if the legacy constructor isn't found.
+        } else {
+            // Fallback to NMS reflection for older versions (1.8 - 1.9).
+            if (packetPlayOutChatConstructor == null) {
+                // The reflection setup failed, so we can't send.
                 return;
             }
-            
-            sendPacket(player, packet);
-        } catch (Exception e) {
-            // Reflection failed.
+            try {
+                String jsonMessage = ComponentSerializer.toString(message);
+                Object chatComponent = chatSerializerMethod.invoke(null, jsonMessage);
+                
+                // The '2' here tells the client this is an action bar message.
+                Object packet = packetPlayOutChatConstructor.newInstance(chatComponent, (byte) 2);
+                
+                sendPacket(player, packet);
+            } catch (Exception e) {
+                // An error occurred during NMS sending.
+                e.printStackTrace();
+            }
         }
     }
     
-    private static void sendPacket(Player player, Object packet) throws Exception {
-        Object handle = getHandleMethod.invoke(player);
-        Object playerConnection = playerConnectionField.get(handle);
-        sendPacketMethod.invoke(playerConnection, packet);
+    private static void sendPacket(Player player, Object packet) {
+        if (getHandleMethod == null) return;
+        try {
+            Object handle = getHandleMethod.invoke(player);
+            Object playerConnection = playerConnectionField.get(handle);
+            sendPacketMethod.invoke(playerConnection, packet);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
