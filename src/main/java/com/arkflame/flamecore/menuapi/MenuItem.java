@@ -21,28 +21,25 @@ public class MenuItem {
     private final List<Material> materialFrames = new ArrayList<>();
     private final List<String> nameFrames = new ArrayList<>();
     private final List<List<String>> loreFrames = new ArrayList<>();
-    private int currentFrame = 0;
     
-    // NEW: Tracks the direction of the animation (1 for forward, -1 for backward)
+    // --- THE FIX: State flags to manage frame initialization ---
+    private boolean materialFramesInitialized = false;
+    private boolean nameFramesInitialized = false;
+    private boolean loreFramesInitialized = false;
+    
+    private int currentFrame = 0;
     private int animationDirection = 1;
 
     public MenuItem(ItemStack itemStack) {
         this.currentStack = itemStack.clone();
+        // Seed the lists with the initial state.
         this.materialFrames.add(itemStack.getType());
         ItemMeta meta = itemStack.getItemMeta();
-        if (meta != null && meta.hasDisplayName()) {
-            this.nameFrames.add(meta.getDisplayName());
-        } else {
-            this.nameFrames.add(null);
-        }
-        if (meta != null && meta.hasLore()) {
-            this.loreFrames.add(meta.getLore());
-        } else {
-            this.loreFrames.add(new ArrayList<>());
-        }
+        this.nameFrames.add(meta != null && meta.hasDisplayName() ? meta.getDisplayName() : null);
+        this.loreFrames.add(meta != null && meta.hasLore() ? meta.getLore() : new ArrayList<>());
     }
     
-    // --- Getters & Setters (Unchanged) ---
+    // Getters & Setters are unchanged
     public ItemStack getCurrentStack() { return currentStack; }
     public boolean isTakeable() { return takeable; }
     public Consumer<InventoryClickEvent> getClickAction() { return clickAction; }
@@ -52,69 +49,85 @@ public class MenuItem {
     public void setClickAction(Consumer<InventoryClickEvent> clickAction) { this.clickAction = clickAction; }
     public void setAnimationInterval(int animationInterval) { this.animationInterval = animationInterval; }
 
-    // --- Animation Frame Management (Unchanged) ---
-    private void prepareFrameList(List<?> list, Object defaultValue) {
-        if (list.size() == 1 && Objects.equals(list.get(0), defaultValue)) {
-            list.clear();
+    // --- Animation Frame Management (Completely Reworked) ---
+    
+    public void addMaterialFrame(Material material) {
+        // If this is the first time a custom material frame is added, clear the seed value.
+        if (!materialFramesInitialized) {
+            materialFrames.clear();
+            materialFramesInitialized = true;
         }
+        materialFrames.add(material);
     }
-    public void addMaterialFrame(Material material) { prepareFrameList(materialFrames, currentStack.getType()); materialFrames.add(material); }
-    public void addNameFrame(String name) { prepareFrameList(nameFrames, null); nameFrames.add(name); }
-    public void addLoreFrame(List<String> lore) { prepareFrameList(loreFrames, new ArrayList<>()); loreFrames.add(lore); }
+    
+    public void addNameFrame(String name) {
+        // If this is the first time a custom name frame is added, clear the seed value.
+        if (!nameFramesInitialized) {
+            nameFrames.clear();
+            nameFramesInitialized = true;
+        }
+        nameFrames.add(name);
+    }
+    
+    public void addLoreFrame(List<String> lore) {
+        // If this is the first time a custom lore frame is added, clear the seed value.
+        if (!loreFramesInitialized) {
+            loreFrames.clear();
+            loreFramesInitialized = true;
+        }
+        loreFrames.add(lore);
+    }
     
     public void applyInitialFrame() {
         this.currentStack = buildFrame(0);
     }
     
-    /**
-     * Called by the MenuAnimator to advance the animation frame.
-     * This version implements a back-and-forth "ping-pong" animation loop.
-     */
     public void tick() {
         if (!isAnimated()) return;
 
         int totalFrames = getTotalFrames();
         if (totalFrames <= 1) return;
 
-        // Calculate the next frame index based on the current direction
         int nextFrameIndex = currentFrame + animationDirection;
 
-        // Check for boundaries and reverse direction if needed
         if (nextFrameIndex >= totalFrames - 1) {
-            nextFrameIndex = totalFrames - 1; // Clamp to the end
-            animationDirection = -1; // Go backward next time
+            nextFrameIndex = totalFrames - 1;
+            animationDirection = -1;
         } else if (nextFrameIndex <= 0) {
-            nextFrameIndex = 0; // Clamp to the start
-            animationDirection = 1; // Go forward next time
+            nextFrameIndex = 0;
+            animationDirection = 1;
         }
         
-        // Update the internal state
         this.currentFrame = nextFrameIndex;
         this.currentStack = buildFrame(this.currentFrame);
     }
 
     private int getTotalFrames() {
         int max = 1;
-        if (materialFrames.size() > 1) max = Math.max(max, materialFrames.size());
-        if (nameFrames.size() > 1) max = Math.max(max, nameFrames.size());
-        if (loreFrames.size() > 1) max = Math.max(max, loreFrames.size());
+        // Only consider lists that the user has actually added frames to.
+        if (materialFramesInitialized) max = Math.max(max, materialFrames.size());
+        if (nameFramesInitialized) max = Math.max(max, nameFrames.size());
+        if (loreFramesInitialized) max = Math.max(max, loreFrames.size());
         return max;
     }
 
     private ItemStack buildFrame(int frameIndex) {
-        Material baseMaterial = getFrame(materialFrames, frameIndex, currentStack.getType());
+        // Use the seeded material as a fallback if no custom material frames were added.
+        Material baseMaterial = getFrame(materialFrames, frameIndex, this.materialFrames.get(0));
         if (baseMaterial == null) baseMaterial = Material.AIR;
         
         ItemStack frameStack = new ItemStack(baseMaterial);
         ItemMeta meta = frameStack.getItemMeta();
         
         if (meta != null) {
-            String name = getFrame(nameFrames, frameIndex, null);
+            // Use the seeded name as a fallback if no custom name frames were added.
+            String name = getFrame(nameFrames, frameIndex, this.nameFrames.get(0));
             if (name != null) {
                 meta.setDisplayName(ColorAPI.colorize(name).toLegacyText());
             }
 
-            List<String> lore = getFrame(loreFrames, frameIndex, null);
+            // Use the seeded lore as a fallback if no custom lore frames were added.
+            List<String> lore = getFrame(loreFrames, frameIndex, this.loreFrames.get(0));
             if (lore != null && !lore.isEmpty()) {
                 meta.setLore(lore.stream()
                         .map(line -> ColorAPI.colorize(line).toLegacyText())
@@ -126,6 +139,7 @@ public class MenuItem {
     }
     
     private <T> T getFrame(List<T> frames, int index, T defaultValue) {
+        // This logic is now more robust. If the user didn't add custom frames, it returns the default.
         if (frames == null || frames.isEmpty()) return defaultValue;
         return frames.get(index % frames.size());
     }

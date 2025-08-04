@@ -2,7 +2,6 @@ package com.arkflame.flamecore.actionbarapi;
 
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.BaseComponent;
-import net.md_5.bungee.chat.ComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -12,54 +11,52 @@ import java.lang.reflect.Method;
 
 /**
  * Internal helper to send action bar packets.
- * This class handles all NMS/Reflection logic to maintain compatibility.
- * It intelligently detects the server version to use the best available method.
+ * This version uses the correct serialization method to ensure color support on all versions (1.8-1.21+).
  */
 class ActionBarPacketSender {
 
-    // --- Caches ---
     private static boolean useModernApi;
 
-    // Reflection caches for NMS (Legacy)
+    // NMS Reflection Caches
     private static Method getHandleMethod;
     private static Method sendPacketMethod;
     private static Field playerConnectionField;
     private static Constructor<?> packetPlayOutChatConstructor;
-    private static Method chatSerializerMethod;
+    private static Method chatSerializerMethodA;
 
     static {
-        // This static block runs once to determine the best method to send action bars.
         try {
-            // Attempt to find the modern Spigot API method.
-            // This is the most reliable check for 1.10+ servers.
+            // Check for the modern Spigot API method. This is the most reliable check.
             Player.Spigot.class.getMethod("sendMessage", ChatMessageType.class, BaseComponent[].class);
             useModernApi = true;
         } catch (Throwable e) {
-            // A NoClassDefFoundError or NoSuchMethodError means we're on an older version.
+            // If the modern method doesn't exist, we are on a legacy version.
             useModernApi = false;
-            // Now, we MUST initialize the NMS reflection as a fallback.
             try {
                 String nmsVersion = Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3];
-                Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + nmsVersion + ".entity.CraftPlayer");
+                String craftbukkitPackage = "org.bukkit.craftbukkit." + nmsVersion;
+                String nmsPackage = "net.minecraft.server." + nmsVersion;
+
+                Class<?> craftPlayerClass = Class.forName(craftbukkitPackage + ".entity.CraftPlayer");
                 getHandleMethod = craftPlayerClass.getMethod("getHandle");
 
-                Class<?> entityPlayerClass = Class.forName("net.minecraft.server." + nmsVersion + ".EntityPlayer");
+                Class<?> entityPlayerClass = Class.forName(nmsPackage + ".EntityPlayer");
                 playerConnectionField = entityPlayerClass.getField("playerConnection");
 
-                Class<?> packetClass = Class.forName("net.minecraft.server." + nmsVersion + ".Packet");
-                Class<?> playerConnectionClass = Class.forName("net.minecraft.server." + nmsVersion + ".PlayerConnection");
+                Class<?> packetClass = Class.forName(nmsPackage + ".Packet");
+                Class<?> playerConnectionClass = Class.forName(nmsPackage + ".PlayerConnection");
                 sendPacketMethod = playerConnectionClass.getMethod("sendPacket", packetClass);
 
-                Class<?> iChatBaseComponentClass = Class.forName("net.minecraft.server." + nmsVersion + ".IChatBaseComponent");
-                Class<?> packetPlayOutChatClass = Class.forName("net.minecraft.server." + nmsVersion + ".PacketPlayOutChat");
+                Class<?> iChatBaseComponentClass = Class.forName(nmsPackage + ".IChatBaseComponent");
+                Class<?> packetPlayOutChatClass = Class.forName(nmsPackage + ".PacketPlayOutChat");
 
-                // This is the key constructor for 1.8 action bars.
                 packetPlayOutChatConstructor = packetPlayOutChatClass.getConstructor(iChatBaseComponentClass, byte.class);
                 
-                chatSerializerMethod = iChatBaseComponentClass.getDeclaredClasses()[0].getMethod("a", String.class);
-                
+                // This is the static method IChatBaseComponent.ChatSerializer.a("...json...")
+                chatSerializerMethodA = iChatBaseComponentClass.getDeclaredClasses()[0].getMethod("a", String.class);
+
             } catch (Exception ex) {
-                System.err.println("Could not initialize NMS reflection for ActionBarAPI. Action bars may not work on this version.");
+                System.err.println("Critical error initializing NMS for legacy ActionBarAPI. Action bars will not work on this version.");
                 ex.printStackTrace();
             }
         }
@@ -67,24 +64,34 @@ class ActionBarPacketSender {
 
     static void send(Player player, BaseComponent[] message) {
         if (useModernApi) {
-            // Use the modern, safe, and efficient Spigot API.
+            // --- Modern Path (1.12+): Use the reliable Spigot API ---
             player.spigot().sendMessage(ChatMessageType.ACTION_BAR, message);
         } else {
-            // Fallback to NMS reflection for older versions (1.8 - 1.9).
-            if (packetPlayOutChatConstructor == null) {
-                // The reflection setup failed, so we can't send.
-                return;
+            // --- Legacy Path (1.8 - 1.11): Use NMS with the corrected JSON format ---
+            if (packetPlayOutChatConstructor == null || chatSerializerMethodA == null) {
+                return; // NMS initialization failed.
             }
             try {
-                String jsonMessage = ComponentSerializer.toString(message);
-                Object chatComponent = chatSerializerMethod.invoke(null, jsonMessage);
+                // 1. Convert our rich components to a string with legacy § codes.
+                // Example: "§6§lTest"
+                String legacyText = BaseComponent.toLegacyText(message);
+
+                // 2. Escape any quotes in the text itself to prevent breaking the JSON.
+                String escapedText = legacyText.replace("\"", "\\\"");
+
+                // 3. Create the simple JSON format that legacy versions understand.
+                // Example: {"text":"§6§lTest"}
+                String json = "{\"text\":\"" + escapedText + "\"}";
+
+                // 4. Use the chat serializer to create an NMS IChatBaseComponent from our simple JSON.
+                Object chatComponent = chatSerializerMethodA.invoke(null, json);
                 
-                // The '2' here tells the client this is an action bar message.
+                // 5. Create the packet with the component and the action bar position byte (2).
                 Object packet = packetPlayOutChatConstructor.newInstance(chatComponent, (byte) 2);
                 
+                // 6. Send the packet.
                 sendPacket(player, packet);
             } catch (Exception e) {
-                // An error occurred during NMS sending.
                 e.printStackTrace();
             }
         }

@@ -23,6 +23,7 @@ import com.arkflame.flamecore.configapi.ConfigAPI;
 import com.arkflame.flamecore.fakeblocksapi.FakeBlock;
 import com.arkflame.flamecore.fakeblocksapi.FakeBlocksAPI;
 import com.arkflame.flamecore.langapi.LangAPI;
+import com.arkflame.flamecore.materialapi.MaterialAPI;
 import com.arkflame.flamecore.menuapi.ItemBuilder;
 import com.arkflame.flamecore.menuapi.MenuAPI;
 import com.arkflame.flamecore.menuapi.MenuBuilder;
@@ -32,6 +33,7 @@ import com.arkflame.flamecore.schematicapi.SchematicAPI;
 import com.arkflame.flamecore.titleapi.TitleAPI;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -229,7 +231,8 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
     }
 
     private void openExampleMenu(Player player) {
-        MenuItem animatedItem = new ItemBuilder(Material.BEACON)
+        // Construcción del ítem animado con nombre "Beacon" + color alternante
+        MenuItem animatedItem = new ItemBuilder(MaterialAPI.getOrAir("BEACON"))
                 .animationInterval(2)
                 .addNameFrame("<#FFFFFF>&lB")
                 .addNameFrame("<#FFFFFF>&lBe")
@@ -240,13 +243,34 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                 .addNameFrame("<#FF5733>&lBeacon")
                 .addNameFrame("<#FFFFFF>&lBeacon")
                 .addNameFrame("<#FF5733>&lBeacon")
-                .addLoreFrame(java.util.Arrays.asList("&7This item has an", "&7animated name color!"))
+                .addLoreFrame(Arrays.asList("&7This item has an", "&7animated name color!"))
                 .onClick(e -> LangAPI.getMessage("commands.menu.clicked").send(e.getWhoClicked()))
                 .build();
 
-        new MenuBuilder(27, "<#FFC300>Animated Menu Example")
-                .setItem(13, animatedItem)
-                .open(player);
+        MenuBuilder menu = new MenuBuilder(27, "<#FFC300>Animated Menu Example")
+                .setItem(13, animatedItem); // Centro del menú
+
+        // Posiciones relativas alrededor del centro (posición 13)
+        int[] glassSlots = { 4, 12, 14, 10, 16, 0, 8, 22 };
+        String[] rainbowHex = {
+                "#FF0000", "#FF7F00", "#FFFF00", "#00FF00",
+                "#0000FF", "#4B0082", "#8F00FF", "#FF1493"
+        };
+
+        // Crear los 8 bloques de cristal que cambian de color
+        for (int i = 0; i < glassSlots.length; i++) {
+            int slot = glassSlots[i];
+            String hex = rainbowHex[i % rainbowHex.length];
+            ItemBuilder glassItem = new ItemBuilder(MaterialAPI.getOrAir("WHITE_STAINED_GLASS_PANE", "STAINED_GLASS"))
+                    .animationInterval(2)
+                    .addNameFrame("<" + hex + ">&l★")
+                    .addNameFrame("<#FFFFFF>&l★")
+                    .addNameFrame("<" + hex + ">&l★");
+            menu.setItem(slot, glassItem.build());
+        }
+
+        // Abrir el menú al jugador
+        menu.open(player);
     }
 
     // --- Listener for the Block Tool ---

@@ -41,22 +41,73 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         if (command == null) return false;
 
         try {
-            executeCommand(sender, command, new LinkedList<>(Arrays.asList(args)));
+            LinkedList<String> processedArgs = processQuotedArgs(args);
+            executeCommand(sender, command, processedArgs);
         } catch (CommandException e) {
             sender.sendMessage(ChatColor.RED + e.getMessage());
         }
         return true;
     }
 
+    /**
+     * NEW METHOD: Processes an array of string arguments, combining arguments
+     * enclosed in double quotes into a single argument.
+     *
+     * @param args The raw arguments from onCommand.
+     * @return A LinkedList of processed arguments.
+     */
+    private LinkedList<String> processQuotedArgs(String[] args) {
+        LinkedList<String> processed = new LinkedList<>();
+        boolean inQuotes = false;
+        StringBuilder quotedArg = new StringBuilder();
+
+        for (String arg : args) {
+            if (inQuotes) {
+                // We are inside a quoted block.
+                if (arg.endsWith("\"")) {
+                    // This is the end of the quote. Append the word (without the quote) and finish.
+                    quotedArg.append(" ").append(arg.substring(0, arg.length() - 1));
+                    processed.add(quotedArg.toString());
+                    inQuotes = false;
+                    quotedArg = new StringBuilder();
+                } else {
+                    // This is a word in the middle of a quote. Just append it.
+                    quotedArg.append(" ").append(arg);
+                }
+            } else {
+                // We are not inside a quote.
+                if (arg.startsWith("\"")) {
+                    if (arg.endsWith("\"") && arg.length() > 1) {
+                        // The entire quote is in one element (e.g., "/cmd "hello world"").
+                        processed.add(arg.substring(1, arg.length() - 1));
+                    } else {
+                        // This is the start of a quote.
+                        inQuotes = true;
+                        quotedArg.append(arg.substring(1));
+                    }
+                } else {
+                    // This is a normal, unquoted argument.
+                    processed.add(arg);
+                }
+            }
+        }
+        
+        // Safety check for unclosed quotes, though it's unlikely with how commands are parsed.
+        if(inQuotes) {
+            processed.add(quotedArg.toString());
+        }
+
+        return processed;
+    }
+
     private void executeCommand(CommandSender sender, Command command, LinkedList<String> args) throws CommandException {
         // --- Subcommand Resolution ---
-        // Find the deepest matching subcommand
         if (!args.isEmpty()) {
             String potentialSubCmd = args.peek().toLowerCase();
             for (Command sub : command.getSubCommands()) {
                 if (sub.getName().equals(potentialSubCmd) || sub.getAliases().contains(potentialSubCmd)) {
-                    args.poll(); // Consume the argument that was the subcommand name
-                    executeCommand(sender, sub, args); // Recurse into the subcommand
+                    args.poll();
+                    executeCommand(sender, sub, args);
                     return;
                 }
             }
