@@ -73,10 +73,17 @@ public class MenuBuilder {
         // For Spigot 1.8-1.21, it falls back to the legacy string.
         Inventory inventory = Bukkit.createInventory(menu, menu.getSize(), ColorAPI.colorize(menu.getTitle()).toLegacyText());
         
+        for (Map.Entry<Integer, MenuItem> entry : menu.getItems().entrySet()) {
+            inventory.setItem(entry.getKey(), entry.getValue().getCurrentStack());
+        }
+        
+        // Now, set this fully populated inventory on our menu object
         menu.setInventory(inventory);
-        menu.updateInventory();
-
+        
+        // Register the open menu with the animator for future updates
         MenuAPI.getAnimator().onMenuOpen(player, menu);
+        
+        // Finally, open the now-perfect inventory for the player.
         player.openInventory(inventory);
     }
 }

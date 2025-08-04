@@ -73,7 +73,7 @@ public class ItemBuilder {
     
     public MenuItem build() {
         // Update the initial item stack with the first frame of animation if it exists
-        menuItem.updateInitialStack();
+        menuItem.applyInitialFrame();
         return menuItem;
     }
 }
