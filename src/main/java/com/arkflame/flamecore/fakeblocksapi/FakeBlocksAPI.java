@@ -1,11 +1,14 @@
 package com.arkflame.flamecore.fakeblocksapi;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,16 +18,24 @@ import java.util.concurrent.ConcurrentHashMap;
  * These blocks are resilient to interaction and can be set to expire after a duration.
  */
 public final class FakeBlocksAPI {
+    private static final int NEARBY_UPDATE_RADIUS_SQUARED = 10 * 10; // 10 block radius, squared for performance
+    private static final int NEARBY_UPDATE_INTERVAL_TICKS = 5; // Update nearby blocks every 2 ticks
+
     private static JavaPlugin plugin;
     private static final Map<UUID, Map<Location, FakeBlockData>> fakeBlocks = new ConcurrentHashMap<>();
 
     public static void init(JavaPlugin pluginInstance) {
         if (plugin != null) {
-            return;
+            return; // Already initialized
         }
         plugin = pluginInstance;
-        plugin.getServer().getPluginManager().registerEvents(new FakeBlockListener(), plugin);
+        
+        // --- THE FIX ---
+        // Pass the plugin instance to the listener's constructor.
+        plugin.getServer().getPluginManager().registerEvents(new FakeBlockListener(plugin), plugin);
+        
         startTimerTask();
+        startNearbyUpdaterTask(); // Start our new proactive task
     }
 
     /**
@@ -66,18 +77,14 @@ public final class FakeBlocksAPI {
         Location location = builder.location;
         Map<Location, FakeBlockData> playerBlocks = fakeBlocks.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>());
 
-        // If a fake block doesn't already exist here, save the original state.
         if (!playerBlocks.containsKey(location)) {
             playerBlocks.put(location, new FakeBlockData(location.getBlock()));
         }
 
-        // Get the stored original state.
         FakeBlockData originalData = playerBlocks.get(location);
         
-        // Update the FakeBlockData with the new fake state and duration.
         originalData.updateFakeState(builder);
         
-        // Send the change to the player.
         originalData.sendFake(player);
     }
     
@@ -100,20 +107,17 @@ public final class FakeBlocksAPI {
                 
                 long currentTime = System.currentTimeMillis();
                 
-                // Use iterators for safe removal while iterating
                 Iterator<Map.Entry<UUID, Map<Location, FakeBlockData>>> playerIterator = fakeBlocks.entrySet().iterator();
                 while (playerIterator.hasNext()) {
                     Map.Entry<UUID, Map<Location, FakeBlockData>> playerEntry = playerIterator.next();
                     Player player = plugin.getServer().getPlayer(playerEntry.getKey());
                     
-                    // If player is offline, no need to process, but keep data for their return.
                     if (player == null || !player.isOnline()) continue;
 
                     Iterator<Map.Entry<Location, FakeBlockData>> blockIterator = playerEntry.getValue().entrySet().iterator();
                     while(blockIterator.hasNext()) {
                         FakeBlockData data = blockIterator.next().getValue();
                         if (data.isExpired(currentTime)) {
-                            // Schedule the restoration on the main thread
                             new BukkitRunnable() {
                                 @Override
                                 public void run() {
@@ -124,12 +128,69 @@ public final class FakeBlocksAPI {
                         }
                     }
 
-                    // Clean up empty player maps
                     if (playerEntry.getValue().isEmpty()) {
                         playerIterator.remove();
                     }
                 }
             }
-        }.runTaskTimerAsynchronously(plugin, 10L, 10L); // Runs every 0.5 seconds
+        }.runTaskTimerAsynchronously(plugin, 10L, 10L);
+    }
+
+    /**
+     * NEW: Package-private helper to allow the listener to access the managed blocks map.
+     * This is crucial for checking environmental changes.
+     * @return The map of all managed fake blocks.
+     */
+    static Map<UUID, Map<Location, FakeBlockData>> getManagedBlocks() {
+        return fakeBlocks;
+    }
+
+    /**
+     * NEW: Starts the proactive task that constantly reinforces the visual state
+     * of nearby fake blocks to prevent them from disappearing upon interaction.
+     */
+    private static void startNearbyUpdaterTask() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (fakeBlocks.isEmpty()) return;
+
+                // This list collects all the updates we need to perform on the main thread.
+                List<Runnable> syncUpdates = new ArrayList<>();
+
+                // Iterate through all players who have fake blocks.
+                for (Map.Entry<UUID, Map<Location, FakeBlockData>> entry : fakeBlocks.entrySet()) {
+                    Player player = Bukkit.getPlayer(entry.getKey());
+                    if (player == null || !player.isOnline()) continue;
+
+                    Location playerLocation = player.getEyeLocation();
+                    Map<Location, FakeBlockData> playerBlocks = entry.getValue();
+
+                    // For each fake block this player has, check if it's nearby.
+                    for (Map.Entry<Location, FakeBlockData> blockEntry : playerBlocks.entrySet()) {
+                        Location blockLocation = blockEntry.getKey();
+                        
+                        // Check for world difference first for efficiency
+                        if (!playerLocation.getWorld().equals(blockLocation.getWorld())) continue;
+
+                        // Use distanceSquared for a massive performance boost over distance()
+                        if (playerLocation.distanceSquared(blockLocation) <= NEARBY_UPDATE_RADIUS_SQUARED) {
+                            // If it's nearby, add a task to re-send the block packet.
+                            syncUpdates.add(() -> blockEntry.getValue().sendFake(player));
+                        }
+                    }
+                }
+
+                // If we have updates to perform, run them all on the main thread.
+                if (!syncUpdates.isEmpty()) {
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            syncUpdates.forEach(Runnable::run);
+                        }
+                    }.runTask(plugin);
+                }
+            }
+        }.runTaskTimerAsynchronously(plugin, 0L, NEARBY_UPDATE_INTERVAL_TICKS);
     }
 }

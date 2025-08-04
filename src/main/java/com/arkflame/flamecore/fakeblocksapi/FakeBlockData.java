@@ -9,11 +9,11 @@ import org.bukkit.entity.Player;
  * Internal class to hold the state of a single fake block for a player.
  */
 class FakeBlockData {
-    // Original State
+    // --- State Storage ---
+    private final Location location; // NEW: Store the actual location of the block.
     private final Material originalMaterial;
     private final byte originalData;
 
-    // Fake State
     private Material fakeMaterial;
     private byte fakeData;
     private long creationTimestamp;
@@ -21,6 +21,7 @@ class FakeBlockData {
 
     @SuppressWarnings("deprecation")
     public FakeBlockData(Block originalBlock) {
+        this.location = originalBlock.getLocation(); // Capture the location on creation.
         this.originalMaterial = originalBlock.getType();
         this.originalData = originalBlock.getData();
     }
@@ -38,7 +39,8 @@ class FakeBlockData {
     @SuppressWarnings("deprecation")
     public void sendFake(Player player) {
         if (player != null && player.isOnline()) {
-            player.sendBlockChange(new Location(player.getWorld(), originalMaterial.getId(), fakeData, durationMillis), fakeMaterial, fakeData);
+            // THE FIX: Use the stored, correct location.
+            player.sendBlockChange(this.location, fakeMaterial, fakeData);
         }
     }
     
@@ -48,7 +50,8 @@ class FakeBlockData {
     @SuppressWarnings("deprecation")
     public void restore(Player player) {
         if (player != null && player.isOnline()) {
-            player.sendBlockChange(new Location(player.getWorld(), originalMaterial.getId(), fakeData, durationMillis), originalMaterial, originalData);
+            // THE FIX: Use the stored, correct location.
+            player.sendBlockChange(this.location, originalMaterial, originalData);
         }
     }
     
