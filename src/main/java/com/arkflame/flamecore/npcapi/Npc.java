@@ -6,14 +6,18 @@ import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.trait.LookClose;
 import net.citizensnpcs.api.trait.trait.Owner;
+
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.Comparator;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -119,6 +123,63 @@ public class Npc {
                 ticks += 10;
             }
         }.runTaskTimer(NpcAPI.getPlugin(), 0L, 10L);
+    }
+
+        /**
+     * NEW: Puts the NPC in "guard mode," causing it to attack the nearest player within a 10-block radius.
+     */
+    public void attackNearby() {
+        attackNearby(10.0);
+    }
+
+    /**
+     * NEW: Puts the NPC in "guard mode," causing it to attack the nearest player within the specified radius.
+     * This method reuses the core .attack() logic.
+     * @param radius The radius in blocks to search for players.
+     */
+    public void attackNearby(double radius) {
+        stopBehavior();
+        
+        behaviorTask = new BukkitRunnable() {
+            private Entity currentTarget;
+
+            @Override
+            public void run() {
+                if (!isSpawned()) {
+                    stopBehavior();
+                    return;
+                }
+
+                // If the current target is invalid or has moved out of range, find a new one.
+                if (currentTarget == null || currentTarget.isDead() || !currentTarget.isValid() || 
+                    currentTarget.getLocation().distanceSquared(getLocation()) > radius * radius) {
+                    
+                    // Find the nearest valid player within the radius.
+                    currentTarget = findNearestPlayer(radius);
+                    
+                    if (currentTarget != null) {
+                        // Found a new target, tell the NPC to attack it.
+                        // This will cancel this controller task and start a new, dedicated attack task.
+                        attack(currentTarget);
+                    }
+                }
+                // If the current target is still valid, the dedicated attack task is already running, so do nothing.
+            }
+        };
+        // This controller task runs every second to check for new targets.
+        behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 20L);
+    }
+    
+    private Player findNearestPlayer(double radius) {
+        if (!isSpawned()) return null;
+        double radiusSquared = radius * radius;
+        
+        return getLocation().getWorld().getPlayers().stream()
+            .filter(player -> !player.getUniqueId().equals(getUniqueId()))
+            .filter(player -> player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR)
+            .filter(player -> getLocation().distanceSquared(player.getLocation()) <= radiusSquared)
+            .min(Comparator.comparingDouble(player -> getLocation().distanceSquared(player.getLocation())))
+            .orElse(null);
     }
 
     // --- Builder Class ---

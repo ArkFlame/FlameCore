@@ -48,3 +48,4 @@ commands:
     moving: "&e{name} &ais now moving to the target location."
     attacking: "&e{npc} &ais now attacking &c{player}&a."
     removed: "&aAll NPCs have been removed."
+    guard_mode: "&e{npc} &ais now in guard mode, attacking players within a &e{radius}&a-block radius!"

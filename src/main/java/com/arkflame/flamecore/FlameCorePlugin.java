@@ -235,7 +235,34 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                             .with("player", targetToAttack.getName())
                                             .send(player);
                                 }))
+                        // Subcommand: /fc npc guard
+                        .addSubCommand(Command.create("guard")
+                                .requires(SenderType.PLAYER)
+                                .addOptionalArgument("radius", Integer.class, "The guard radius (optional).")
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
 
+                                    // Find the nearest NPC to turn into a guard.
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+
+                                    if (!nearestNpc.isPresent()) {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                        return;
+                                    }
+
+                                    Npc targetNpc = nearestNpc.get();
+
+                                    // Get the optional radius, defaulting to 10.
+                                    double radius = ctx.getArgumentOrDefault("radius", 10);
+
+                                    // Tell the NPC to start attacking nearby players within the radius.
+                                    targetNpc.attackNearby(radius);
+
+                                    LangAPI.getMessage("commands.npc.guard_mode")
+                                            .with("npc", targetNpc.getName())
+                                            .with("radius", radius)
+                                            .send(player);
+                                }))
                         // Subcommand: /fc npc removeall
                         .addSubCommand(Command.create("removeall")
                                 .setExecutor(ctx -> {

@@ -48,3 +48,4 @@ commands:
     moving: "&e{name} &aahora se está moviendo hacia la ubicación objetivo."
     attacking: "&e{npc} &aahora está atacando a &c{player}&a."
     removed: "&aTodos los NPCs han sido eliminados."
+    guard_mode: "&e{npc} &aahora está en modo guardián, ¡atacando a jugadores en un radio de &e{radius}&a bloques!"
