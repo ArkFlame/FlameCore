@@ -1,6 +1,6 @@
 # NpcAPI Getting Started Guide
 
-The `NpcAPI` provides a simple and powerful interface for controlling Citizens NPCs in Spigot/BungeeCord plugins, enabling features like spawning, movement, player interaction, and block breaking with a fluent, intuitive design. This guide outlines the essential steps to use the API effectively.
+The `NpcAPI` is a version-agnostic wrapper around the Citizens plugin, providing a simple, fluent interface for creating, controlling, and managing interactive NPCs with behaviors like pathfinding, combat, and automatic respawning in Spigot/BungeeCord plugins.
 
 ## 1. Dependencies
 
@@ -42,9 +42,9 @@ public class MyPlugin extends JavaPlugin {
 }
 ```
 
-## 3. Create and Spawn an NPC
+## 3. Create a Basic NPC
 
-Use the fluent `Npc.builder()` to create, configure, and spawn an NPC with a name and skin in one chain.
+Use the fluent `Npc.builder()` to create, configure, and spawn an NPC with a name and skin. By default, NPCs are temporary and hittable.
 
 ```java
 import com.arkflame.flamecore.npcapi.Npc;
@@ -54,42 +54,97 @@ import org.bukkit.World;
 World world = // ... get world
 Location spawnLocation = new Location(world, 100, 64, 100);
 
-Npc guard = Npc.builder("Sir Reginald")
-    .skin("Notch")
+Npc guard = Npc.builder("Guard")
+    .skin("Notch") // Fetches skin asynchronously
     .location(spawnLocation)
     .buildAndSpawn();
 ```
 
-## 4. Make an NPC Move
+## 4. Make NPCs Persistent and Respawnable
 
-Direct the NPC to walk to a specified location using the `.moveTo()` method.
+Configure NPCs to persist across server restarts and respawn after being killed using `.persistent()` and `.respawnTime()`.
 
 ```java
-Location marketStall = new Location(world, 150, 65, 120);
-guard.moveTo(marketStall);
+Location bossRoomLocation = // ... get location
+
+Npc boss = Npc.builder("&c&lMagma Lord")
+    .skin("Jeb_")
+    .location(bossRoomLocation)
+    .persistent(true) // Saves NPC in Citizens' config
+    .respawnTime(60) // Respawns 60 seconds after death
+    .buildAndSpawn();
 ```
 
-## 5. Make an NPC Follow and Attack a Player
+## 5. Control NPC Behavior
 
-Configure the NPC to chase, look at, and attack a player using the `.attack()` method. Stop the attack with `.stopAttacking()` if needed.
+Use high-level methods to manage NPC movement, combat, and guard behavior.
+
+### a) Movement
+
+Direct NPCs to walk to a location, follow a player, or stop all behavior.
 
 ```java
 import org.bukkit.entity.Player;
 
-Player targetPlayer = // ... get player
-guard.attack(targetPlayer);
+Location market = // ... get location
+Player playerToFollow = // ... get player
 
-// To stop the attack
-// guard.stopAttacking();
+guard.moveTo(market); // Walk to a specific spot
+guard.follow(playerToFollow); // Follow a player
+guard.stop(); // Stop all movement and behavior
 ```
 
-## 6. Simulate Block Breaking
+### b) Combat
 
-Instruct the NPC to walk to a block and simulate breaking it using the `.breakBlock()` method.
+Configure NPCs to attack a specific player with automatic pathfinding and damage calculation (based on 1.8 PvP values).
 
 ```java
-import org.bukkit.block.Block;
+Player target = // ... get player
+guard.attack(target); // Attack a specific player
+guard.stop(); // Stop the current attack
+```
 
-Block targetBlock = world.getBlockAt(105, 64, 100);
-guard.breakBlock(targetBlock);
+### c) Guard Mode (Attack Nearby)
+
+Enable NPCs to automatically attack the nearest valid player (e.g., non-creative) within a specified radius.
+
+```java
+boss.attackNearby(15.0); // Attack non-creative players within 15 blocks
+boss.stop(); // Stop guard mode
+```
+
+## 6. Manage NPCs
+
+Safely find and manage NPCs created by your plugin.
+
+### a) Find NPCs
+
+Locate NPCs by proximity or retrieve all NPCs created by your plugin.
+
+```java
+import java.util.List;
+import java.util.Optional;
+
+Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+nearestNpc.ifPresent(npc -> {
+    player.sendMessage("The nearest NPC is " + npc.getName());
+});
+
+List<Npc> nearbyNpcs = NpcAPI.getNearby(player.getLocation(), 20.0);
+```
+
+### b) Remove NPCs
+
+Remove specific or all NPCs, including cleanup for temporary NPCs.
+
+```java
+import java.util.Collection;
+
+Collection<Npc> myNpcs = NpcAPI.getAll(); // Get all plugin NPCs
+NpcAPI.destroyAll(); // Permanently destroy all plugin NPCs
+
+@Override
+public void onDisable() {
+    NpcAPI.destroyAllTemporary(); // Clean up temporary NPCs
+}
 ```
