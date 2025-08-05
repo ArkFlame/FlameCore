@@ -39,9 +39,11 @@ import net.citizensnpcs.api.npc.NPC;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -74,6 +76,11 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
         registerFlameCoreCommand();
 
         getLogger().info("FlameCore Example Plugin has been enabled!");
+    }
+
+    @Override
+    public void onDisable() {
+        NpcAPI.destroyAll();
     }
 
     private void registerFlameCoreCommand() {
@@ -163,84 +170,79 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                 LangAPI.getMessage("commands.blocksapi.enabled").send(ctx.getSender());
                             }
                         }))
-                        .addSubCommand(Command.create("npc")
-                                .setPermission("flamecore.npc")
-                                .setDescription("Demonstrates the NpcAPI features.")
+                .addSubCommand(Command.create("npc")
+                        .setPermission("flamecore.npc")
+                        .setDescription("Demonstrates the NpcAPI features.")
 
-                                // Subcommand: /fc npc create <name> [skin]
-                                .addSubCommand(Command.create("create")
-                                        .requires(SenderType.PLAYER)
-                                        .addArgument("name", String.class, "The name for the NPC.")
-                                        .addOptionalArgument("skin", String.class, "The skin for the NPC (optional).")
-                                        .setExecutor(ctx -> {
-                                            Player player = ctx.getPlayer();
-                                            String name = ctx.getArgument("name");
-                                            String skin = ctx.getArgumentOrDefault("skin", player.getName());
+                        // Subcommand: /fc npc create <name> [skin]
+                        .addSubCommand(Command.create("create")
+                                .requires(SenderType.PLAYER)
+                                .addArgument("name", String.class, "The name for the NPC.")
+                                .addOptionalArgument("skin", String.class, "The skin for the NPC (optional).")
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    String name = ctx.getArgument("name");
+                                    String skin = ctx.getArgumentOrDefault("skin", player.getName());
 
-                                            Npc.builder(name)
-                                                    .skin(skin)
-                                                    .location(player.getLocation())
-                                                    .buildAndSpawn();
+                                    Npc.builder(name)
+                                            .skin(skin)
+                                            .location(player.getLocation())
+                                            .buildAndSpawn();
 
-                                            LangAPI.getMessage("commands.npc.created")
-                                                    .with("name", name)
-                                                    .send(player);
-                                        }))
+                                    LangAPI.getMessage("commands.npc.created")
+                                            .with("name", name)
+                                            .send(player);
+                                }))
 
-                                // Subcommand: /fc npc moveto
-                                .addSubCommand(Command.create("moveto")
-                                        .requires(SenderType.PLAYER)
-                                        .setExecutor(ctx -> {
-                                            Player player = ctx.getPlayer();
-                                            // Find the nearest NPC within 10 blocks to command.
-                                            Npc targetNpc = player.getNearbyEntities(10, 10, 10).stream()
-                                                    .filter(e -> CitizensAPI.getNPCRegistry().isNPC(e))
-                                                    .map(e -> NpcAPI.getNpc(CitizensAPI.getNPCRegistry().getNPC(e)))
-                                                    .findFirst()
-                                                    .orElse(null);
+                        // Subcommand: /fc npc moveto
+                        .addSubCommand(Command.create("moveto")
+                                .requires(SenderType.PLAYER)
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    // Find the nearest NPC within 10 blocks to command.
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (!nearestNpc.isPresent()) {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                        return;
+                                    }
+                                    Npc targetNpc = nearestNpc.get();
 
-                                            if (targetNpc == null) {
-                                                LangAPI.getMessage("commands.npc.not_found").send(player);
-                                                return;
-                                            }
+                                    targetNpc.moveTo(player.getTargetBlock(null, 100).getLocation());
+                                    LangAPI.getMessage("commands.npc.moving").with("name", targetNpc.getName())
+                                            .send(player);
+                                }))
 
-                                            targetNpc.moveTo(player.getTargetBlock(null, 100).getLocation());
-                                            LangAPI.getMessage("commands.npc.moving").with("name", targetNpc.getName())
-                                                    .send(player);
-                                        }))
+                        // Subcommand: /fc npc attack [player]
+                        // Snippet for your FlameCorePlugin command
+                        .addSubCommand(Command.create("attack")
+                                .requires(SenderType.PLAYER)
+                                .addOptionalArgument("target", Player.class, "The player to attack.")
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    Player targetToAttack = ctx.getArgumentOrDefault("target", player);
 
-                                // Subcommand: /fc npc attack [player]
-                                .addSubCommand(Command.create("attack")
-                                        .requires(SenderType.PLAYER)
-                                        .addOptionalArgument("target", Player.class, "The player to attack.")
-                                        .setExecutor(ctx -> {
-                                            Player player = ctx.getPlayer();
-                                            Player targetToAttack = ctx.getArgumentOrDefault("target", player);
-                                            Npc targetNpc = player.getNearbyEntities(10, 10, 10).stream()
-                                                    .filter(e -> CitizensAPI.getNPCRegistry().isNPC(e))
-                                                    .map(e -> NpcAPI.getNpc(CitizensAPI.getNPCRegistry().getNPC(e)))
-                                                    .findFirst()
-                                                    .orElse(null);
+                                    // --- THE CORRECTED WAY TO FIND A NEARBY NPC ---
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (!nearestNpc.isPresent()) {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                        return;
+                                    }
+                                    Npc targetNpc = nearestNpc.get();
 
-                                            if (targetNpc == null) {
-                                                LangAPI.getMessage("commands.npc.not_found").send(player);
-                                                return;
-                                            }
+                                    targetNpc.attack(targetToAttack);
+                                    LangAPI.getMessage("commands.npc.attacking")
+                                            .with("npc", targetNpc.getName())
+                                            .with("player", targetToAttack.getName())
+                                            .send(player);
+                                }))
 
-                                            targetNpc.attack(targetToAttack);
-                                            LangAPI.getMessage("commands.npc.attacking")
-                                                    .with("npc", targetNpc.getName())
-                                                    .with("player", targetToAttack.getName())
-                                                    .send(player);
-                                        }))
-
-                                // Subcommand: /fc npc removeall
-                                .addSubCommand(Command.create("removeall")
-                                        .setExecutor(ctx -> {
-                                            // Iterate through all NPCs in the registry and destroy them.
-                                            CitizensAPI.getNPCRegistry().forEach(NPC::destroy);
-                                            LangAPI.getMessage("commands.npc.removed").send(ctx.getSender());
-                                        })))
+                        // Subcommand: /fc npc removeall
+                        .addSubCommand(Command.create("removeall")
+                                .setExecutor(ctx -> {
+                                    // Iterate through all NPCs in the registry and destroy them.
+                                    CitizensAPI.getNPCRegistry().forEach(NPC::destroy);
+                                    LangAPI.getMessage("commands.npc.removed").send(ctx.getSender());
+                                })))
                 .addSubCommand(Command.create("fakeblock")
                         .requires(SenderType.PLAYER)
                         .setExecutor(ctx -> {

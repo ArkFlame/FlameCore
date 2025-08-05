@@ -1,7 +1,9 @@
 package com.arkflame.flamecore.npcapi.util;
 
 import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.npc.MemoryNPCDataStore;
 import net.citizensnpcs.api.npc.NPC;
+import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.api.trait.Trait;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -13,8 +15,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * A definitive compatibility wrapper for Citizens API versions (2.0.28 to 2.0.39+).
- * This class uses reflection to safely bridge API differences and provides safe methods.
+ * A definitive compatibility wrapper for Citizens API versions (2.0.28 to
+ * 2.0.39+).
+ * This class uses reflection to safely bridge API differences and provides safe
+ * methods.
  */
 public final class CitizensCompat {
     // --- Feature Flags ---
@@ -37,6 +41,8 @@ public final class CitizensCompat {
     private static Field playerConnectionField;
     private static Constructor<?> animationPacketConstructor;
 
+    private static NPCRegistry temporaryRegistry;
+
     static {
         // --- Detect SkinTrait Location ---
         try {
@@ -47,7 +53,8 @@ public final class CitizensCompat {
                 skinTraitClass = (Class<? extends Trait>) Class.forName("net.citizensnpcs.api.trait.trait.SkinTrait");
                 setSkinNameMethod = skinTraitClass.getMethod("setSkinName", String.class, boolean.class);
             } catch (Exception ex) {
-                System.err.println("Could not find any SkinTrait class for Citizens. Skin functionality will be disabled.");
+                System.err.println(
+                        "Could not find any SkinTrait class for Citizens. Skin functionality will be disabled.");
             }
         }
 
@@ -58,9 +65,10 @@ public final class CitizensCompat {
             Class<?> animationEnum = Class.forName("net.citizensnpcs.trait.AnimationTrait$Animation");
             playAnimationMethod = animationTraitClass.getMethod("play", animationEnum);
             animationSupport = true;
-        } catch (Exception e) { /* AnimationTrait does not exist on this version. */ }
+        } catch (Exception e) {
+            /* AnimationTrait does not exist on this version. */ }
         SUPPORTS_ANIMATION_TRAIT = animationSupport;
-        
+
         // --- THE DEFINITIVE FIX for Equipment ---
         try {
             equipmentClass = (Class<? extends Trait>) Class.forName("net.citizensnpcs.api.trait.trait.Equipment");
@@ -82,7 +90,8 @@ public final class CitizensCompat {
         // --- Initialize NMS Fallback for Arm Swing (for 1.8) ---
         if (!SUPPORTS_ANIMATION_TRAIT) {
             try {
-                String nmsVersion = CitizensAPI.getPlugin().getServer().getClass().getPackage().getName().split("\\.")[3];
+                String nmsVersion = CitizensAPI.getPlugin().getServer().getClass().getPackage().getName()
+                        .split("\\.")[3];
                 String craftbukkitPackage = "org.bukkit.craftbukkit." + nmsVersion;
                 String nmsPackage = "net.minecraft.server." + nmsVersion;
 
@@ -97,13 +106,26 @@ public final class CitizensCompat {
                 Class<?> entityClass = Class.forName(nmsPackage + ".Entity");
                 animationPacketConstructor = packetAnimationClass.getConstructor(entityClass, int.class);
             } catch (Exception e) {
-                System.err.println("Could not initialize NMS for legacy arm swing. Swing animations may not work on this version.");
+                System.err.println(
+                        "Could not initialize NMS for legacy arm swing. Swing animations may not work on this version.");
             }
         }
+
+        try {
+            // Try to find the modern getTemporaryNPCRegistry() method
+            Method getTempRegistryMethod = CitizensAPI.class.getMethod("getTemporaryNPCRegistry");
+            // If it exists, invoke it to get the modern temporary registry
+            temporaryRegistry = (NPCRegistry) getTempRegistryMethod.invoke(null);
+        } catch (Exception e) {
+            // If the method doesn't exist, we are on a legacy version.
+            // Create our own anonymous, in-memory registry as a fallback.
+            temporaryRegistry = CitizensAPI.createAnonymousNPCRegistry(new MemoryNPCDataStore());
+        }
     }
-    
+
     public static void setSkin(NPC npc, String skinName) {
-        if (skinTraitClass == null || setSkinNameMethod == null) return;
+        if (skinTraitClass == null || setSkinNameMethod == null)
+            return;
         try {
             Trait skinTrait = npc.getOrAddTrait(skinTraitClass);
             setSkinNameMethod.invoke(skinTrait, skinName, true);
@@ -113,13 +135,16 @@ public final class CitizensCompat {
     }
 
     /**
-     * Correctly sets equipment for an NPC, supporting both modern and legacy Citizens APIs.
+     * Correctly sets equipment for an NPC, supporting both modern and legacy
+     * Citizens APIs.
      * For now, this helper only sets the main hand.
-     * @param npc The NPC to modify.
+     * 
+     * @param npc  The NPC to modify.
      * @param item The item to place in the NPC's hand.
      */
     public static void setEquipment(NPC npc, ItemStack item) {
-        if (equipmentClass == null) return;
+        if (equipmentClass == null)
+            return;
         try {
             Trait equipmentTrait = npc.getOrAddTrait((Class<? extends Trait>) equipmentClass);
 
@@ -127,8 +152,8 @@ public final class CitizensCompat {
                 // Modern enum-based slot system (1.13+)
                 Object handEnum = equipmentSlotClass.getEnumConstants()[4]; // EquipmentSlot.HAND (usually 4th or 5th)
                 // A safer way to find it:
-                for(Object enumConstant : equipmentSlotClass.getEnumConstants()) {
-                    if(enumConstant.toString().equals("HAND")) {
+                for (Object enumConstant : equipmentSlotClass.getEnumConstants()) {
+                    if (enumConstant.toString().equals("HAND")) {
                         handEnum = enumConstant;
                         break;
                     }
@@ -144,7 +169,8 @@ public final class CitizensCompat {
     }
 
     public static void playSwingAnimation(NPC npc) {
-        if (npc.getEntity() == null) return;
+        if (npc.getEntity() == null)
+            return;
         if (SUPPORTS_ANIMATION_TRAIT) {
             try {
                 Trait animationTrait = npc.getOrAddTrait(animationTraitClass);
@@ -155,13 +181,14 @@ public final class CitizensCompat {
             }
         } else {
             // Legacy NMS Fallback
-            if (animationPacketConstructor == null) return;
+            if (animationPacketConstructor == null)
+                return;
             try {
                 Object handle = getHandleMethod.invoke(npc.getEntity());
                 Object packet = animationPacketConstructor.newInstance(handle, 0); // 0 is the swing animation
-                
+
                 for (Player player : npc.getStoredLocation().getWorld().getPlayers()) {
-                    if(player.getLocation().distanceSquared(npc.getStoredLocation()) < 2500) { // 50*50 blocks
+                    if (player.getLocation().distanceSquared(npc.getStoredLocation()) < 2500) { // 50*50 blocks
                         Object playerHandle = getHandleMethod.invoke(player);
                         Object playerConnection = playerConnectionField.get(playerHandle);
                         sendPacketMethod.invoke(playerConnection, packet);
@@ -172,17 +199,28 @@ public final class CitizensCompat {
             }
         }
     }
-    
+
     public static void faceLocation(NPC npc, Location location) {
         npc.faceLocation(location);
     }
 
     /**
      * Teleports an NPC using the correct, modern Bukkit TeleportCause.
-     * @param npc The NPC to teleport.
+     * 
+     * @param npc      The NPC to teleport.
      * @param location The target location.
      */
     public static void teleport(NPC npc, Location location) {
         npc.teleport(location, TeleportCause.PLUGIN);
+    }
+
+    /**
+     * Gets the appropriate NPCRegistry for storing temporary (non-persistent) NPCs.
+     * This method is version-agnostic.
+     * 
+     * @return The temporary NPCRegistry.
+     */
+    public static NPCRegistry getTemporaryNPCRegistry() {
+        return temporaryRegistry;
     }
 }
