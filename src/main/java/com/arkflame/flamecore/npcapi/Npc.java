@@ -48,9 +48,9 @@ public class Npc {
     }
     
     // --- Internal Setters used by the Builder and Listener ---
-    void setRespawnTime(int seconds) { this.respawnTime = seconds; }
+    public void setRespawnTime(int seconds) { this.respawnTime = seconds; }
     void setInitialSpawnLocation(Location location) { this.initialSpawnLocation = location; }
-    void setPersistent(boolean persistent) { this.persistent = persistent; }
+    public void setPersistent(boolean persistent) { this.persistent = persistent; }
     void setHitDelay(int ticks) { this.hitDelay = ticks; } // New setter for the builder
     
     // --- Getters for internal use ---
@@ -93,7 +93,7 @@ public class Npc {
     }
     
     // --- High-Level Behaviors (Task-based) ---
-    private void stopBehavior() {
+    public void stopBehavior() {
         if (behaviorTask != null) {
             try { behaviorTask.cancel(); } catch (IllegalStateException ignored) {}
             behaviorTask = null;

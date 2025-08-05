@@ -44,8 +44,13 @@ commands:
     save_success: "&aSchematic saved as {name}.arkschem."
   npc:
     created: "&aCreated NPC named &e{name}&a."
-    not_found: "&cNo nearby NPC found to command."
+    not_found: "&cNo nearby NPC found."
     moving: "&e{name} &ais now moving to the target location."
-    attacking: "&e{npc} &ais now attacking &c{player}&a."
-    removed: "&aAll NPCs have been removed."
-    guard_mode: "&e{npc} &ais now in guard mode, attacking players within a &e{radius}&a-block radius!"
+    attacking: "&e{name} &ais now attacking &c{player}&a."
+    guard_mode: "&e{name} &ais now in guard mode, attacking players within a &e{radius}&a-block radius!"
+    stopped: "&e{name} &ahas stopped its current behavior."
+    removed_single: "&aRemoved NPC &e{name}&a."
+    removed_all: "&aAll custom NPCs have been removed."
+    set:
+      persistent: "&aPersistence for &e{name} &a{state}."
+      respawntime: "&aRespawn time for &e{name} &aset to &e{seconds} &aseconds."
