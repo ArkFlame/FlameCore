@@ -2,73 +2,98 @@ package com.arkflame.flamecore.npcapi;
 
 import com.arkflame.flamecore.npcapi.util.DamageUtil;
 import net.citizensnpcs.api.event.NPCDeathEvent;
+import net.citizensnpcs.api.event.NPCDamageByEntityEvent;
 import net.citizensnpcs.api.event.NPCRemoveEvent;
 import org.bukkit.Location;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 public class NpcListener implements Listener {
     
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onNpcDamage(EntityDamageByEntityEvent event) {
-        // Check if the damaged entity is one of our managed NPCs.
-        NpcAPI.getNpc(event.getEntity()).ifPresent(npc -> {
+    private final Map<UUID, Boolean> npcInvulnerability = new ConcurrentHashMap<>();
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onNpcDamage(NPCDamageByEntityEvent event) {
+        // Use the new, more reliable get_npc_by_NPC_object method.
+        NpcAPI.getNpc(event.getNPC()).ifPresent(npc -> {
+            UUID npcId = npc.getUniqueId();
+
+            if (npcInvulnerability.containsKey(npcId)) {
+                event.setCancelled(true);
+                return;
+            }
+            
             Entity damager = event.getDamager();
             Player attacker = null;
 
-            // Handle projectile damage (like arrows)
             if (damager instanceof Arrow) {
-                Arrow arrow = (Arrow) damager;
-                if (arrow.getShooter() instanceof Player) {
-                    attacker = (Player) arrow.getShooter();
+                if (((Arrow) damager).getShooter() instanceof Player) {
+                    attacker = (Player) ((Arrow) damager).getShooter();
                 }
             } else if (damager instanceof Player) {
                 attacker = (Player) damager;
             }
 
             if (attacker != null) {
-                // If an attacker is found, calculate and set the damage based on their weapon.
                 ItemStack weapon = attacker.getItemInHand();
                 double damage = DamageUtil.getDamage(weapon);
                 event.setDamage(damage);
+
+                npc.getHandle().setProtected(true);
+                npcInvulnerability.put(npcId, true);
+
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        // The correct, safe check for existence before modification.
+                        if (npc.getHandle() != null && npc.getHandle().isSpawned()) {
+                            npc.getHandle().setProtected(false);
+                        }
+                        npcInvulnerability.remove(npcId);
+                    }
+                }.runTaskLater(NpcAPI.getPlugin(), npc.getHitDelay());
             }
         });
     }
 
     @EventHandler
     public void onNpcDeath(NPCDeathEvent event) {
+        npcInvulnerability.remove(event.getNPC().getUniqueId());
+        
         NpcAPI.getNpc(event.getNPC()).ifPresent(npc -> {
             int respawnTime = npc.getRespawnTime();
             
-            if (respawnTime > 0) {
-                // This NPC should respawn.
+            if (respawnTime >= 0) {
                 Location respawnLocation = npc.getInitialSpawnLocation();
-                if (respawnLocation == null) {
-                    System.err.println("NPC " + npc.getName() + " has a respawn time but no initial spawn location was set!");
-                    return;
-                }
+                if (respawnLocation == null) return;
                 
-                // Schedule the respawn task.
                 new BukkitRunnable() {
                     @Override
                     public void run() {
-                        // Check if the NPC object still exists in case it was manually destroyed
-                        // during the respawn timer.
-                        if (NpcAPI.getNpc(event.getNPC()).isPresent()) {
+                        // The correct, safe check using the NPC's owning registry.
+                        if (event.getNPC().getOwningRegistry().getById(event.getNPC().getId()) != null && !event.getNPC().isSpawned()) {
                             event.getNPC().spawn(respawnLocation);
-                        }
+                            event.getNPC().setProtected(false);
+                            Entity npcEntity = event.getNPC().getEntity();
+                            if (npcEntity instanceof LivingEntity) {
+                                ((LivingEntity) npcEntity).setMaximumNoDamageTicks(npc.getHitDelay());
+                            }
+                         }
                     }
                 }.runTaskLater(NpcAPI.getPlugin(), respawnTime * 20L);
                 
             } else {
-                // No respawn time, destroy it permanently.
                 npc.destroy();
             }
         });
@@ -76,6 +101,7 @@ public class NpcListener implements Listener {
     
     @EventHandler
     public void onNpcRemove(NPCRemoveEvent event) {
+        npcInvulnerability.remove(event.getNPC().getUniqueId());
         NpcAPI.unregisterNpc(event.getNPC().getUniqueId());
     }
 }

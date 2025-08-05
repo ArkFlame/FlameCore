@@ -52,12 +52,7 @@ public final class NpcAPI {
     public static boolean isEnabled() {
         return citizensEnabled;
     }
-
-    /**
-     * Gets our managed Npc wrapper for a Bukkit Entity, if it is one of our NPCs.
-     * @param entity The entity to check.
-     * @return An Optional containing the Npc wrapper.
-     */
+    
     public static Optional<Npc> getNpc(Entity entity) {
         if (!isEnabled() || entity == null || !CitizensAPI.getNPCRegistry().isNPC(entity)) {
             return Optional.empty();
@@ -65,12 +60,19 @@ public final class NpcAPI {
         return Optional.ofNullable(managedNpcs.get(entity.getUniqueId()));
     }
 
-    public static Optional<Npc> getNpc(UUID uuid) {
-        return Optional.ofNullable(managedNpcs.get(uuid));
+    /**
+     * NEW: Gets our managed Npc wrapper for a raw Citizens NPC object.
+     * This is now the preferred method for use in Citizens event handlers.
+     */
+    public static Optional<Npc> getNpc(NPC npc) {
+        if (!isEnabled() || npc == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(managedNpcs.get(npc.getUniqueId()));
     }
 
-    public static Optional<Npc> getNpc(NPC npc) {
-        return Optional.ofNullable(managedNpcs.get(npc.getUniqueId()));
+    public static Optional<Npc> getNpc(UUID uuid) {
+        return Optional.ofNullable(managedNpcs.get(uuid));
     }
 
     /**

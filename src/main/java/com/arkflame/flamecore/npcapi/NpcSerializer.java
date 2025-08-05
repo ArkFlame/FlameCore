@@ -27,6 +27,7 @@ class NpcSerializer {
         
         config.set("location", npc.getInitialSpawnLocation());
         config.set("respawn-time", npc.getRespawnTime());
+        config.set("hit-delay", npc.getHitDelay());
         
         config.save();
     }
@@ -52,6 +53,7 @@ class NpcSerializer {
         if (config.contains("respawn-time")) {
             builder.respawnTime(config.getInt("respawn-time"));
         }
+        builder.hitDelay(config.getInt("hit-delay", 20));
         
         return builder;
     }

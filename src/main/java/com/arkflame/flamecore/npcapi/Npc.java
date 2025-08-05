@@ -29,6 +29,7 @@ public class Npc {
     private Location initialSpawnLocation;
     private int respawnTime = -1; // in seconds, -1 means no respawn
     private boolean persistent = false;
+    private int hitDelay = 20; // Default to 20 ticks (1 second)
 
     public Npc(NPC citizensNpc) {
         this.citizensNpc = citizensNpc;
@@ -50,11 +51,14 @@ public class Npc {
     void setRespawnTime(int seconds) { this.respawnTime = seconds; }
     void setInitialSpawnLocation(Location location) { this.initialSpawnLocation = location; }
     void setPersistent(boolean persistent) { this.persistent = persistent; }
+    void setHitDelay(int ticks) { this.hitDelay = ticks; } // New setter for the builder
     
     // --- Getters for internal use ---
     public int getRespawnTime() { return respawnTime; }
     public Location getInitialSpawnLocation() { return initialSpawnLocation; }
     NPC getCitizensNpc() { return citizensNpc; }
+    NPC getHandle() { return citizensNpc; }
+    public int getHitDelay() { return hitDelay; } // New getter for the listener
 
     // --- Public API Methods ---
     public UUID getUniqueId() { return citizensNpc.getUniqueId(); }
@@ -205,6 +209,7 @@ public class Npc {
         private EntityType entityType = EntityType.PLAYER;
         private boolean persistent = false;
         private int respawnTime = -1;
+        private int hitDelay = 10; // Default hit delay
 
         private Builder(String name) { this.name = name; }
         public Builder location(Location location) { this.location = location; return this; }
@@ -212,6 +217,10 @@ public class Npc {
         public Builder type(EntityType entityType) { this.entityType = entityType; return this; }
         public Builder persistent(boolean persistent) { this.persistent = persistent; return this; }
         public Builder respawnTime(int seconds) { this.respawnTime = seconds; return this; }
+        public Builder hitDelay(int ticks) {
+            this.hitDelay = ticks;
+            return this;
+        }
 
         public Npc build() {
             NPCRegistry registry = CitizensCompat.getTemporaryNPCRegistry();
@@ -228,6 +237,7 @@ public class Npc {
             Npc wrappedNpc = new Npc(npc);
             wrappedNpc.setPersistent(this.persistent);
             wrappedNpc.setRespawnTime(this.respawnTime);
+            wrappedNpc.setHitDelay(this.hitDelay); // Pass the hit delay
             
             if (this.persistent) {
                 wrappedNpc.setInitialSpawnLocation(this.location);
@@ -237,13 +247,26 @@ public class Npc {
             return wrappedNpc;
         }
 
+        /**
+         * Creates and immediately spawns the NPC at the specified location,
+         * applying the configured hit delay upon spawn.
+         * @return The spawned Npc object.
+         */
         public Npc buildAndSpawn() {
             if (location == null) {
                 throw new IllegalStateException("Location must be set before calling buildAndSpawn()");
             }
             Npc npc = build();
             npc.setInitialSpawnLocation(location);
+            
+            // Spawn the NPC in the world
             npc.citizensNpc.spawn(location);
+
+            Entity npcEntity = npc.citizensNpc.getEntity();
+            if (npcEntity instanceof LivingEntity) {
+                ((LivingEntity) npcEntity).setMaximumNoDamageTicks(npc.getHitDelay());
+            }
+            
             return npc;
         }
         
