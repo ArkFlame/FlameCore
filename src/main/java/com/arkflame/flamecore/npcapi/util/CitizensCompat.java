@@ -5,6 +5,7 @@ import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.trait.Trait;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause; // Correct import
 import org.bukkit.inventory.ItemStack;
 
 import java.lang.reflect.Constructor;
@@ -22,7 +23,8 @@ public final class CitizensCompat {
     // --- Cached Classes ---
     private static Class<? extends Trait> skinTraitClass;
     private static Class<? extends Trait> animationTraitClass;
-    private static Class<?> equipmentSlotClass; // Modern Equipment.EquipmentSlot enum
+    private static Class<?> equipmentClass;
+    private static Class<?> equipmentSlotClass; // Modern org.bukkit.inventory.EquipmentSlot enum
 
     // --- Cached Methods ---
     private static Method setSkinNameMethod;
@@ -59,18 +61,22 @@ public final class CitizensCompat {
         } catch (Exception e) { /* AnimationTrait does not exist on this version. */ }
         SUPPORTS_ANIMATION_TRAIT = animationSupport;
         
-        // --- Detect EquipmentSlot Enum ---
+        // --- THE DEFINITIVE FIX for Equipment ---
         try {
-            equipmentSlotClass = Class.forName("net.citizensnpcs.api.trait.trait.Equipment$EquipmentSlot");
-            Class<?> equipmentClass = Class.forName("net.citizensnpcs.api.trait.trait.Equipment");
-            setEquipmentMethod = equipmentClass.getMethod("set", equipmentSlotClass, ItemStack.class);
-        } catch (Exception e) {
+            equipmentClass = (Class<? extends Trait>) Class.forName("net.citizensnpcs.api.trait.trait.Equipment");
+
+            // Try to load the modern (enum-based) method first.
             try {
-                Class<?> equipmentClass = Class.forName("net.citizensnpcs.api.trait.trait.Equipment");
+                equipmentSlotClass = Class.forName("org.bukkit.inventory.EquipmentSlot");
+                setEquipmentMethod = equipmentClass.getMethod("set", equipmentSlotClass, ItemStack.class);
+            } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+                // If the modern enum or method isn't found, we're on a legacy version.
+                // Fall back to the legacy (int-based) method.
                 setEquipmentLegacyMethod = equipmentClass.getMethod("set", int.class, ItemStack.class);
-            } catch (Exception ex) {
-                System.err.println("Could not find Equipment trait methods.");
             }
+        } catch (Exception e) {
+            System.err.println("Could not initialize Equipment trait methods for Citizens.");
+            e.printStackTrace();
         }
 
         // --- Initialize NMS Fallback for Arm Swing (for 1.8) ---
@@ -82,14 +88,11 @@ public final class CitizensCompat {
 
                 Class<?> craftPlayerClass = Class.forName(craftbukkitPackage + ".entity.CraftPlayer");
                 getHandleMethod = craftPlayerClass.getMethod("getHandle");
-
                 Class<?> entityPlayerClass = Class.forName(nmsPackage + ".EntityPlayer");
                 playerConnectionField = entityPlayerClass.getField("playerConnection");
-
                 Class<?> packetClass = Class.forName(nmsPackage + ".Packet");
                 Class<?> playerConnectionClass = Class.forName(nmsPackage + ".PlayerConnection");
                 sendPacketMethod = playerConnectionClass.getMethod("sendPacket", packetClass);
-
                 Class<?> packetAnimationClass = Class.forName(nmsPackage + ".PacketPlayOutAnimation");
                 Class<?> entityClass = Class.forName(nmsPackage + ".Entity");
                 animationPacketConstructor = packetAnimationClass.getConstructor(entityClass, int.class);
@@ -109,16 +112,31 @@ public final class CitizensCompat {
         }
     }
 
+    /**
+     * Correctly sets equipment for an NPC, supporting both modern and legacy Citizens APIs.
+     * For now, this helper only sets the main hand.
+     * @param npc The NPC to modify.
+     * @param item The item to place in the NPC's hand.
+     */
     public static void setEquipment(NPC npc, ItemStack item) {
+        if (equipmentClass == null) return;
         try {
-            Trait equipmentTrait = npc.getOrAddTrait(Class.forName("net.citizensnpcs.api.trait.trait.Equipment"));
+            Trait equipmentTrait = npc.getOrAddTrait((Class<? extends Trait>) equipmentClass);
+
             if (setEquipmentMethod != null && equipmentSlotClass != null) {
-                // Modern path with enum
-                Object handEnum = equipmentSlotClass.getEnumConstants()[0]; // HAND is the first constant
+                // Modern enum-based slot system (1.13+)
+                Object handEnum = equipmentSlotClass.getEnumConstants()[4]; // EquipmentSlot.HAND (usually 4th or 5th)
+                // A safer way to find it:
+                for(Object enumConstant : equipmentSlotClass.getEnumConstants()) {
+                    if(enumConstant.toString().equals("HAND")) {
+                        handEnum = enumConstant;
+                        break;
+                    }
+                }
                 setEquipmentMethod.invoke(equipmentTrait, handEnum, item);
             } else if (setEquipmentLegacyMethod != null) {
-                // Legacy path with int
-                setEquipmentLegacyMethod.invoke(equipmentTrait, 0, item);
+                // Legacy integer-based slot system (1.8–1.12)
+                setEquipmentLegacyMethod.invoke(equipmentTrait, 0, item); // 0 = hand
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -156,11 +174,15 @@ public final class CitizensCompat {
     }
     
     public static void faceLocation(NPC npc, Location location) {
-        // This method is surprisingly stable across versions.
         npc.faceLocation(location);
     }
 
+    /**
+     * Teleports an NPC using the correct, modern Bukkit TeleportCause.
+     * @param npc The NPC to teleport.
+     * @param location The target location.
+     */
     public static void teleport(NPC npc, Location location) {
-        npc.teleport(location, Player.TeleportCause.PLUGIN);
+        npc.teleport(location, TeleportCause.PLUGIN);
     }
 }

@@ -42,3 +42,9 @@ commands:
     paste_success: "&aSchematic paste complete."
     save_start: "&eSaving schematic to {name}.arkschem..."
     save_success: "&aSchematic saved as {name}.arkschem."
+  npc:
+    created: "&aCreated NPC named &e{name}&a."
+    not_found: "&cNo nearby NPC found to command."
+    moving: "&e{name} &ais now moving to the target location."
+    attacking: "&e{npc} &ais now attacking &c{player}&a."
+    removed: "&aAll NPCs have been removed."
