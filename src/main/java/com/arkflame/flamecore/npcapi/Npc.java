@@ -74,7 +74,7 @@ public class Npc {
         stopBehavior();
         behaviorTask = new BukkitRunnable() {
             private long lastAttackTime = 0;
-            private final long attackInterval = 1000;
+            private final long attackInterval = 500;
 
             @Override
             public void run() {
