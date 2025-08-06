@@ -1,8 +1,14 @@
 # English Language File for FlameCore Example Plugin
 errors:
   player-not-found: "&cPlayer not found."
+  wrong-usage: "&cWrong usage! Correct format:"
+# General translated words
+words:
+  enabled: "enabled"
+  disabled: "disabled"
 
 commands:
+  usage-format: "&eUsage: /{command} {usage}"
   help:
     - "&e&lFlameCore API Showcase"
     - "&7Use &a/fc <subcommand> &7to test features."
@@ -54,3 +60,14 @@ commands:
     set:
       persistent: "&aPersistence for &e{name} &a{state}."
       respawntime: "&aRespawn time for &e{name} &aset to &e{seconds} &aseconds."
+    help:
+      - "&e&lNPC Command Help"
+      - "&a/fc npc create <name> &7- Creates a temporary NPC where you stand."
+      - "&a/fc npc moveto &7- Commands the nearest NPC to move to where you are looking."
+      - "&a/fc npc attack [player] &7- Commands the nearest NPC to attack a player."
+      - "&a/fc npc guard [radius] &7- Toggles guard mode for the nearest NPC."
+      - "&a/fc npc stop &7- Stops the nearest NPC's current behavior."
+      - "&a/fc npc set persistent <true|false> &7- Sets if the nearest NPC is persistent."
+      - "&a/fc npc set respawntime <seconds> &7- Sets the respawn time (-1 to disable)."
+      - "&a/fc npc remove &7- Removes the nearest NPC."
+      - "&a/fc npc removeall &7- Removes all custom NPCs."

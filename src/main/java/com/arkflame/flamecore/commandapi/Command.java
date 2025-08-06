@@ -20,6 +20,7 @@ public class Command {
     private String permission = "";
     private SenderType requiredSender = SenderType.ANY;
     private Consumer<CommandContext> executor;
+    private String usage = null;
 
     private Command(String name) {
         this.name = name.toLowerCase().trim();
@@ -82,4 +83,13 @@ public class Command {
     public List<Argument<?>> getArguments() { return arguments; }
     public Consumer<CommandContext> getExecutor() { return executor; }
     public List<Command> getSubCommands() { return subCommands; }
+    
+    public Command setUsage(String usage) {
+        this.usage = usage;
+        return this;
+    }
+
+    public String getUsage() {
+        return usage;
+    }
 }

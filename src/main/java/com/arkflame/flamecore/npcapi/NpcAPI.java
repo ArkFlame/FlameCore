@@ -5,11 +5,12 @@ import com.arkflame.flamecore.configapi.ConfigAPI;
 import com.arkflame.flamecore.npcapi.util.CitizensCompat;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.util.*;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 /**
  * Main entry point for the NpcAPI.
  * This API is a high-level wrapper around the Citizens plugin, featuring
- * a fluent builder, custom persistence, and simplified behavior control.
+ * a fluent builder, custom file-based persistence, and simplified behavior control.
  */
 public final class NpcAPI {
     private static JavaPlugin plugin;
@@ -41,8 +42,13 @@ public final class NpcAPI {
         plugin.getLogger().info("Successfully hooked into Citizens for NpcAPI.");
         Bukkit.getPluginManager().registerEvents(new NpcListener(), plugin);
         
-        // Load all persistent NPCs from our custom config files on startup.
-        loadNpcsFromFiles();
+        // Load persistent NPCs after a 1-tick delay to ensure Citizens is fully loaded.
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                loadNpcsFromFiles();
+            }
+        }.runTask(plugin);
     }
     
     /**
@@ -52,27 +58,25 @@ public final class NpcAPI {
     public static boolean isEnabled() {
         return citizensEnabled;
     }
-    
+
+    /**
+     * Gets our managed Npc wrapper for a Bukkit Entity, if it is one of our NPCs.
+     * @param entity The entity to check.
+     * @return An Optional containing the Npc wrapper.
+     */
     public static Optional<Npc> getNpc(Entity entity) {
-        if (!isEnabled() || entity == null || !CitizensAPI.getNPCRegistry().isNPC(entity)) {
+        if (!isEnabled() || entity == null || !CitizensCompat.getTemporaryNPCRegistry().isNPC(entity)) {
             return Optional.empty();
         }
         return Optional.ofNullable(managedNpcs.get(entity.getUniqueId()));
     }
 
     /**
-     * NEW: Gets our managed Npc wrapper for a raw Citizens NPC object.
-     * This is now the preferred method for use in Citizens event handlers.
+     * Gets our managed Npc wrapper for a raw Citizens NPC object.
      */
     public static Optional<Npc> getNpc(NPC npc) {
-        if (!isEnabled() || npc == null) {
-            return Optional.empty();
-        }
+        if (!isEnabled() || npc == null) return Optional.empty();
         return Optional.ofNullable(managedNpcs.get(npc.getUniqueId()));
-    }
-
-    public static Optional<Npc> getNpc(UUID uuid) {
-        return Optional.ofNullable(managedNpcs.get(uuid));
     }
 
     /**
@@ -142,9 +146,7 @@ public final class NpcAPI {
     }
     
     private static void loadNpcsFromFiles() {
-        if (!npcsFolder.exists()) {
-            npcsFolder.mkdirs();
-        }
+        if (!npcsFolder.exists()) npcsFolder.mkdirs();
         if (!npcsFolder.isDirectory()) return;
         
         File[] files = npcsFolder.listFiles((dir, name) -> name.endsWith(".yml"));
@@ -152,18 +154,35 @@ public final class NpcAPI {
         
         int count = 0;
         for (File npcFile : files) {
+            String fileName = npcFile.getName();
+            String uuidString = fileName.substring(0, fileName.length() - 4);
+            
             try {
-                // Use our ConfigAPI to load the file's content.
-                Config npcConfig = ConfigAPI.getConfig("npcs/" + npcFile.getName());
-                Npc.builderFromConfig(npcConfig).buildAndSpawn();
-                count++;
+                UUID npcId = UUID.fromString(uuidString);
+                Config npcConfig = ConfigAPI.getConfig("npcs/" + fileName);
+                
+                if (npcConfig.getRaw().getKeys(false).isEmpty() || !npcConfig.contains("name")) {
+                    plugin.getLogger().warning("Skipping malformed or empty NPC file: " + fileName);
+                    continue;
+                }
+                
+                Npc npc = NpcSerializer.deserialize(npcConfig, npcId);
+
+                if (npc != null && npc.getInitialSpawnLocation() != null) {
+                    npc.spawn();
+                    count++;
+                } else if (npc != null) {
+                    Config.ConfigLocation wrapper = npcConfig.getLocation("location");
+                    String worldName = (wrapper != null) ? wrapper.getWorldName() : "an unknown world";
+                    plugin.getLogger().warning("Could not spawn persistent NPC " + npc.getName() + " because its world ('" + worldName + "') is not loaded.");
+                }
+
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load NPC from malformed file: " + npcFile.getName());
-                e.printStackTrace();
+                plugin.getLogger().warning("Failed to load NPC from file: " + fileName);
             }
         }
         if (count > 0) {
-            plugin.getLogger().info("Loaded " + count + " persistent NPCs from files.");
+            plugin.getLogger().info("Loaded and spawned " + count + " persistent NPCs from files.");
         }
     }
 

@@ -75,7 +75,7 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        NpcAPI.destroyAll();
+        NpcAPI.despawnAll();
     }
 
     private void registerFlameCoreCommand() {
@@ -165,171 +165,164 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                 LangAPI.getMessage("commands.blocksapi.enabled").send(ctx.getSender());
                             }
                         }))
-            .addSubCommand(Command.create("npc")
-                .setPermission("flamecore.npc")
-                .setDescription("Manages custom NPCs via the NpcAPI.")
-                
-                // --- Main Creation Command ---
-                .addSubCommand(Command.create("create")
-                    .requires(SenderType.PLAYER)
-                    .addArgument("name", String.class, "The name for the NPC (use quotes for spaces).")
-                    .setExecutor(ctx -> {
-                        Player player = ctx.getPlayer();
-                        String name = ctx.getArgument("name");
-
-                        Npc.builder(name)
-                           .skin(player.getName())
-                           .location(player.getLocation())
-                           .buildAndSpawn();
-                        
-                        LangAPI.getMessage("commands.npc.created")
-                               .with("name", name)
-                               .send(player);
-                    })
-                )
-
-                // --- Behavior Commands (act on the nearest NPC) ---
-                .addSubCommand(Command.create("moveto")
-                    .requires(SenderType.PLAYER)
-                    .setExecutor(ctx -> {
-                        Player player = ctx.getPlayer();
-                        Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-                        
-                        // --- THE FIX: Replaced ifPresentOrElse with a standard if/else block ---
-                        if (nearestNpc.isPresent()) {
-                            Npc npc = nearestNpc.get();
-                            npc.moveTo(player.getTargetBlock(null, 100).getLocation());
-                            LangAPI.getMessage("commands.npc.moving").with("name", npc.getName()).send(player);
-                        } else {
-                            LangAPI.getMessage("commands.npc.not_found").send(player);
-                        }
-                    })
-                )
-                .addSubCommand(Command.create("attack")
-                    .requires(SenderType.PLAYER)
-                    .addOptionalArgument("target", Player.class, "The player to attack.")
-                    .setExecutor(ctx -> {
-                        Player player = ctx.getPlayer();
-                        Player targetToAttack = ctx.getArgumentOrDefault("target", player);
-                        Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-
-                        if (nearestNpc.isPresent()) {
-                            Npc npc = nearestNpc.get();
-                            npc.attack(targetToAttack);
-                            LangAPI.getMessage("commands.npc.attacking")
-                                   .with("npc", npc.getName())
-                                   .with("player", targetToAttack.getName())
-                                   .send(player);
-                        } else {
-                            LangAPI.getMessage("commands.npc.not_found").send(player);
-                        }
-                    })
-                )
-                .addSubCommand(Command.create("guard")
-                    .requires(SenderType.PLAYER)
-                    .addOptionalArgument("radius", Integer.class, "The guard radius (optional).")
-                    .setExecutor(ctx -> {
-                        Player player = ctx.getPlayer();
-                        Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-                        
-                        if (nearestNpc.isPresent()) {
-                            Npc npc = nearestNpc.get();
-                            double radius = ctx.getArgumentOrDefault("radius", 10);
-                            npc.attackNearby(radius);
-                            LangAPI.getMessage("commands.npc.guard_mode")
-                                   .with("npc", npc.getName())
-                                   .with("radius", radius)
-                                   .send(player);
-                        } else {
-                            LangAPI.getMessage("commands.npc.not_found").send(player);
-                        }
-                    })
-                )
-                .addSubCommand(Command.create("stop")
-                    .requires(SenderType.PLAYER)
-                    .setExecutor(ctx -> {
-                        Player player = ctx.getPlayer();
-                        Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-
-                        if (nearestNpc.isPresent()) {
-                            Npc npc = nearestNpc.get();
-                            npc.stopBehavior();
-                            LangAPI.getMessage("commands.npc.stopped").with("name", npc.getName()).send(player);
-                        } else {
-                            LangAPI.getMessage("commands.npc.not_found").send(player);
-                        }
-                    })
-                )
-
-                // --- Configuration Commands ---
-                .addSubCommand(Command.create("set")
-                    .addSubCommand(Command.create("persistent")
-                        .requires(SenderType.PLAYER)
-                        .addArgument("state", Boolean.class, "true or false.")
+                .addSubCommand(Command.create("npc")
+                        .setPermission("flamecore.npc")
+                        .setDescription("Manages custom NPCs via the NpcAPI.")
+                        // Set a custom, detailed usage message that points to the help subcommand.
+                        .setUsage("&cInvalid subcommand! Use &e/fc npc help &cfor a list of commands.")
                         .setExecutor(ctx -> {
-                            Player player = ctx.getPlayer();
-                            boolean state = ctx.getArgument("state");
-                            Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-
-                            if (nearestNpc.isPresent()) {
-                                Npc npc = nearestNpc.get();
-                                npc.setPersistent(state);
-                                npc.save();
-                                LangAPI.getMessage("commands.npc.set.persistent")
-                                       .with("name", npc.getName())
-                                       .with("state", state ? "enabled" : "disabled")
-                                       .send(player);
-                            } else {
-                                LangAPI.getMessage("commands.npc.not_found").send(player);
-                            }
+                            // The base command /fc npc now shows the help message by default.
+                            LangAPI.getMessage("commands.npc.help").send(ctx.getSender());
                         })
-                    )
-                    .addSubCommand(Command.create("respawntime")
-                        .requires(SenderType.PLAYER)
-                        .addArgument("seconds", Integer.class, "Time in seconds (-1 to disable).")
-                        .setExecutor(ctx -> {
-                            Player player = ctx.getPlayer();
-                            int seconds = ctx.getArgument("seconds");
-                            Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
 
-                            if (nearestNpc.isPresent()) {
-                                Npc npc = nearestNpc.get();
-                                npc.setRespawnTime(seconds);
-                                npc.save();
-                                LangAPI.getMessage("commands.npc.set.respawntime")
-                                       .with("name", npc.getName())
-                                       .with("seconds", seconds)
-                                       .send(player);
-                            } else {
-                                LangAPI.getMessage("commands.npc.not_found").send(player);
-                            }
-                        })
-                    )
-                )
-
-                // --- Management Commands ---
-                .addSubCommand(Command.create("remove")
-                    .requires(SenderType.PLAYER)
-                    .setExecutor(ctx -> {
-                        Player player = ctx.getPlayer();
-                        Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-
-                        if (nearestNpc.isPresent()) {
-                            Npc npc = nearestNpc.get();
-                            LangAPI.getMessage("commands.npc.removed_single").with("name", npc.getName()).send(player);
-                            npc.destroy();
-                        } else {
-                            LangAPI.getMessage("commands.npc.not_found").send(player);
-                        }
-                    })
-                )
-                .addSubCommand(Command.create("removeall")
-                    .setExecutor(ctx -> {
-                        NpcAPI.destroyAll();
-                        LangAPI.getMessage("commands.npc.removed_all").send(ctx.getSender());
-                    })
-                )
-            )
+                        // --- Subcommands ---
+                        .addSubCommand(Command.create("help")
+                                .setDescription("Shows the NPC command list.")
+                                .setExecutor(ctx -> LangAPI.getMessage("commands.npc.help").send(ctx.getSender())))
+                        .addSubCommand(Command.create("create")
+                                .requires(SenderType.PLAYER)
+                                .addArgument("name", String.class, "The name for the NPC (use quotes for spaces).")
+                                // Usage will be auto-generated: /create <name>
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    String name = ctx.getArgument("name");
+                                    Npc.builder(name)
+                                            .skin(player.getName())
+                                            .location(player.getLocation())
+                                            .buildAndSpawn();
+                                    LangAPI.getMessage("commands.npc.created").with("name", name).send(player);
+                                }))
+                        .addSubCommand(Command.create("moveto")
+                                .requires(SenderType.PLAYER)
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (nearestNpc.isPresent()) {
+                                        Npc npc = nearestNpc.get();
+                                        npc.moveTo(player.getTargetBlock(null, 100).getLocation());
+                                        LangAPI.getMessage("commands.npc.moving").with("name", npc.getName())
+                                                .send(player);
+                                    } else {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                    }
+                                }))
+                        .addSubCommand(Command.create("attack")
+                                .requires(SenderType.PLAYER)
+                                .addOptionalArgument("target", Player.class, "The player to attack.")
+                                // Usage will be auto-generated: /attack [target]
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    Player targetToAttack = ctx.getArgumentOrDefault("target", player);
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (nearestNpc.isPresent()) {
+                                        Npc npc = nearestNpc.get();
+                                        npc.attack(targetToAttack);
+                                        LangAPI.getMessage("commands.npc.attacking")
+                                                .with("npc", npc.getName())
+                                                .with("player", targetToAttack.getName())
+                                                .send(player);
+                                    } else {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                    }
+                                }))
+                        .addSubCommand(Command.create("guard")
+                                .requires(SenderType.PLAYER)
+                                .addOptionalArgument("radius", Integer.class, "The guard radius (optional).")
+                                // Usage will be auto-generated: /guard [radius]
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (nearestNpc.isPresent()) {
+                                        Npc npc = nearestNpc.get();
+                                        double radius = ctx.getArgumentOrDefault("radius", 10);
+                                        npc.attackNearby(radius);
+                                        LangAPI.getMessage("commands.npc.guard_mode")
+                                                .with("npc", npc.getName())
+                                                .with("radius", radius)
+                                                .send(player);
+                                    } else {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                    }
+                                }))
+                        .addSubCommand(Command.create("stop")
+                                .requires(SenderType.PLAYER)
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (nearestNpc.isPresent()) {
+                                        Npc npc = nearestNpc.get();
+                                        npc.stopBehavior();
+                                        LangAPI.getMessage("commands.npc.stopped").with("name", npc.getName())
+                                                .send(player);
+                                    } else {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                    }
+                                }))
+                        .addSubCommand(Command.create("set")
+                                // Custom usage for the parent /set command
+                                .setUsage("&cInvalid property! Use &e/fc npc set <persistent|respawntime>")
+                                .addSubCommand(Command.create("persistent")
+                                        .requires(SenderType.PLAYER)
+                                        .addArgument("state", Boolean.class, "true or false.")
+                                        // Usage will be auto-generated: /persistent <state>
+                                        .setExecutor(ctx -> {
+                                            Player player = ctx.getPlayer();
+                                            boolean state = ctx.getArgument("state");
+                                            Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                            if (nearestNpc.isPresent()) {
+                                                Npc npc = nearestNpc.get();
+                                                npc.setPersistent(state);
+                                                npc.save();
+                                                LangAPI.getMessage("commands.npc.set.persistent")
+                                                        .with("name", npc.getName())
+                                                        .with("state",
+                                                                state ? LangAPI.getMessage("words.enabled").get(player)
+                                                                        : LangAPI.getMessage("words.disabled")
+                                                                                .get(player))
+                                                        .send(player);
+                                            } else {
+                                                LangAPI.getMessage("commands.npc.not_found").send(player);
+                                            }
+                                        }))
+                                .addSubCommand(Command.create("respawntime")
+                                        .requires(SenderType.PLAYER)
+                                        .addArgument("seconds", Integer.class, "Time in seconds (-1 to disable).")
+                                        // Usage will be auto-generated: /respawntime <seconds>
+                                        .setExecutor(ctx -> {
+                                            Player player = ctx.getPlayer();
+                                            int seconds = ctx.getArgument("seconds");
+                                            Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                            if (nearestNpc.isPresent()) {
+                                                Npc npc = nearestNpc.get();
+                                                npc.setRespawnTime(seconds);
+                                                npc.save();
+                                                LangAPI.getMessage("commands.npc.set.respawntime")
+                                                        .with("name", npc.getName())
+                                                        .with("seconds", seconds)
+                                                        .send(player);
+                                            } else {
+                                                LangAPI.getMessage("commands.npc.not_found").send(player);
+                                            }
+                                        })))
+                        .addSubCommand(Command.create("remove")
+                                .requires(SenderType.PLAYER)
+                                .setExecutor(ctx -> {
+                                    Player player = ctx.getPlayer();
+                                    Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
+                                    if (nearestNpc.isPresent()) {
+                                        Npc npc = nearestNpc.get();
+                                        LangAPI.getMessage("commands.npc.removed_single").with("name", npc.getName())
+                                                .send(player);
+                                        npc.destroy();
+                                    } else {
+                                        LangAPI.getMessage("commands.npc.not_found").send(player);
+                                    }
+                                }))
+                        .addSubCommand(Command.create("removeall")
+                                .setExecutor(ctx -> {
+                                    NpcAPI.destroyAll();
+                                    LangAPI.getMessage("commands.npc.removed_all").send(ctx.getSender());
+                                })))
                 .addSubCommand(Command.create("fakeblock")
                         .requires(SenderType.PLAYER)
                         .setExecutor(ctx -> {
