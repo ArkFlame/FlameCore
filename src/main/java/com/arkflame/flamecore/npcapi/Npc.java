@@ -203,6 +203,9 @@ public class Npc {
             // Step 2: Create our authoritative wrapper with its own unique FlameCore ID.
             Npc wrappedNpc = new Npc(npc, UUID.randomUUID());
             
+            // Register it in our map
+            NpcAPI.registerNpc(wrappedNpc);
+            
             // Step 3: Configure the wrapper with all builder properties.
             wrappedNpc.setPersistent(this.persistent);
             wrappedNpc.setRespawnTime(this.respawnTime);

@@ -158,7 +158,7 @@ public final class NpcAPI {
             String uuidString = fileName.substring(0, fileName.length() - 4);
             
             try {
-                UUID npcId = UUID.fromString(uuidString);
+                UUID flameId = UUID.fromString(uuidString); // This is OUR UUID
                 Config npcConfig = ConfigAPI.getConfig("npcs/" + fileName);
                 
                 if (npcConfig.getRaw().getKeys(false).isEmpty() || !npcConfig.contains("name")) {
@@ -166,7 +166,7 @@ public final class NpcAPI {
                     continue;
                 }
                 
-                Npc npc = NpcSerializer.deserialize(npcConfig, npcId);
+                Npc npc = NpcSerializer.deserialize(npcConfig, flameId);
 
                 if (npc != null && npc.getInitialSpawnLocation() != null) {
                     npc.spawn();
