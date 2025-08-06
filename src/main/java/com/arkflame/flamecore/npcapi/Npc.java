@@ -28,11 +28,15 @@ public class Npc {
     private BukkitRunnable behaviorTask;
     
     // State fields
-    private Location initialSpawnLocation;
-    private int respawnTime = -1;
-    private boolean persistent = false;
-    private int hitDelay = 10;
-    private EntityType entityType = EntityType.PLAYER;
+    public Location initialSpawnLocation;
+    public int respawnTime = -1;
+    public boolean persistent = false;
+    public int hitDelay = 10;
+    public EntityType entityType = EntityType.PLAYER;
+    
+    public Behavior behavior = Behavior.IDLE;
+    public Entity targetEntity;
+    public Location targetLocation;
 
     /**
      * The ONLY constructor. It is now package-private and called exclusively by the builder.
@@ -103,6 +107,7 @@ public class Npc {
         NpcSerializer.serialize(this);
     }
     
+
     // --- Behavior Methods ---
     public void stopBehavior() {
         if (behaviorTask != null) {
@@ -112,6 +117,30 @@ public class Npc {
         if (isSpawned()) {
             citizensNpc.getNavigator().cancelNavigation();
         }
+        this.behavior = Behavior.IDLE;
+        this.targetEntity = null;
+        this.targetLocation = null;
+    }
+    
+    public void attack(Entity target) {
+        stopBehavior();
+        this.behavior = Behavior.ATTACKING;
+        this.targetEntity = target;
+        // Start the task for the new behavior
+        this.behaviorTask = new NpcAttackTask(this);
+        this.behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 5L);
+    }
+    
+    public void attackNearby() {
+        attackNearby(10);
+    }
+
+    public void attackNearby(double radius) {
+        stopBehavior();
+        this.behavior = Behavior.ATTACKING_NEARBY;
+        // Start the new controller task
+        this.behaviorTask = new NpcGuardTask(this, radius);
+        this.behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 20L);
     }
 
     public void moveTo(Location location) {
@@ -122,74 +151,6 @@ public class Npc {
     public void follow(Entity target) {
         stopBehavior();
         citizensNpc.getNavigator().setTarget(target, false);
-    }
-    
-    public void attack(Entity target) {
-        stopBehavior();
-        behaviorTask = new BukkitRunnable() {
-            private long lastAttackTime = 0;
-            private final long attackInterval = 500;
-
-            @Override
-            public void run() {
-                if (!isSpawned() || target == null || target.isDead() || !target.isValid()) {
-                    stopBehavior();
-                    return;
-                }
-                
-                citizensNpc.getNavigator().setTarget(target, false);
-                
-                if (getLocation().distanceSquared(target.getLocation()) < 9) { // Attack range
-                    citizensNpc.getNavigator().cancelNavigation();
-                    if (System.currentTimeMillis() - lastAttackTime > attackInterval) {
-                        CitizensCompat.faceLocation(citizensNpc, target.getLocation());
-                        CitizensCompat.playSwingAnimation(citizensNpc);
-                        if (target instanceof LivingEntity) {
-                            ((LivingEntity) target).damage(1.0, citizensNpc.getEntity());
-                        }
-                        lastAttackTime = System.currentTimeMillis();
-                    }
-                }
-            }
-        };
-        behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 5L);
-    }
-
-    public void attackNearby(double radius) {
-        stopBehavior();
-        behaviorTask = new BukkitRunnable() {
-            private Entity currentTarget;
-
-            @Override
-            public void run() {
-                if (!isSpawned()) {
-                    stopBehavior();
-                    return;
-                }
-
-                if (currentTarget == null || currentTarget.isDead() || !currentTarget.isValid() || 
-                    currentTarget.getLocation().distanceSquared(getLocation()) > radius * radius) {
-                    
-                    currentTarget = findNearestPlayer(radius);
-                    
-                    if (currentTarget != null) {
-                        attack(currentTarget);
-                    }
-                }
-            }
-        };
-        behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 20L);
-    }
-    
-    private Player findNearestPlayer(double radius) {
-        if (!isSpawned()) return null;
-        double radiusSquared = radius * radius;
-        return getLocation().getWorld().getPlayers().stream()
-            .filter(player -> !player.getUniqueId().equals(getUniqueId()))
-            .filter(player -> player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR)
-            .filter(player -> getLocation().distanceSquared(player.getLocation()) <= radiusSquared)
-            .min(Comparator.comparingDouble(player -> getLocation().distanceSquared(player.getLocation())))
-            .orElse(null);
     }
 
     public void breakBlock(Block block) {
