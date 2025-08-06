@@ -12,7 +12,6 @@ import java.util.function.Consumer;
  * This version uses serialized BlockWrapper strings for maximum compatibility.
  */
 public class Schematic {
-    // The list now holds our new data object instead of SchematicBlock
     private final List<RelativeBlockData> blocks;
     private Location origin;
 
@@ -34,21 +33,41 @@ public class Schematic {
     }
 
     /**
-     * Queues this schematic to be pasted at a specific location.
+     * Queues this schematic to be pasted at a specific location, not ignoring air.
      * The operation is handled asynchronously by the SchematicAPI.
-     * @param pasteLocation The location where the schematic's corner (0,0,0) should be placed.
+     * @param pasteLocation The location where the schematic's pivot point should be placed.
      */
     public void paste(Location pasteLocation) {
-        paste(pasteLocation, null);
+        paste(pasteLocation, false, null);
     }
 
     /**
-     * Queues this schematic to be pasted, with a callback for completion.
+     * Queues this schematic to be pasted at a specific location.
+     * The operation is handled asynchronously by the SchematicAPI.
+     * @param pasteLocation The location where the schematic's pivot point should be placed.
+     * @param ignoreAir If true, air blocks in the schematic will not be placed.
+     */
+    public void paste(Location pasteLocation, boolean ignoreAir) {
+        paste(pasteLocation, ignoreAir, null);
+    }
+
+    /**
+     * Queues this schematic to be pasted, with a callback for completion, not ignoring air.
      * @param pasteLocation The location to paste at.
      * @param callback A consumer that receives 'true' upon completion.
      */
     public void paste(Location pasteLocation, Consumer<Boolean> callback) {
-        SchematicAPI.queuePaste(this, pasteLocation, callback);
+        paste(pasteLocation, false, callback);
+    }
+    
+    /**
+     * Queues this schematic to be pasted, with a callback for completion.
+     * @param pasteLocation The location to paste at.
+     * @param ignoreAir If true, air blocks in the schematic will not be placed.
+     * @param callback A consumer that receives 'true' upon completion.
+     */
+    public void paste(Location pasteLocation, boolean ignoreAir, Consumer<Boolean> callback) {
+        SchematicAPI.queuePaste(this, pasteLocation, ignoreAir, callback);
     }
     
     /**

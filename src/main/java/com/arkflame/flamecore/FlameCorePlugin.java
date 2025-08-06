@@ -356,7 +356,9 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                 return;
                             }
                             LangAPI.getMessage("commands.schematic.copy_start").send(p);
-                            SchematicAPI.copy(schematicPos1.get(p.getUniqueId()), schematicPos2.get(p.getUniqueId()))
+                            Location pivot = p.getLocation().getBlock().getLocation();
+                            SchematicAPI
+                                    .copy(schematicPos1.get(p.getUniqueId()), schematicPos2.get(p.getUniqueId()), pivot)
                                     .thenAccept(schem -> {
                                         schematicClipboard.put(p.getUniqueId(), schem);
                                         LangAPI.getMessage("commands.schematic.copy_success").send(p);
@@ -369,7 +371,8 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                 return;
                             }
                             LangAPI.getMessage("commands.schematic.paste_start").send(p);
-                            schematicClipboard.get(p.getUniqueId()).paste(p.getLocation(), success -> {
+                            Location pasteLocation = p.getLocation().getBlock().getLocation();
+                            schematicClipboard.get(p.getUniqueId()).paste(pasteLocation, success -> {
                                 LangAPI.getMessage("commands.schematic.paste_success").send(p);
                             });
                         }))

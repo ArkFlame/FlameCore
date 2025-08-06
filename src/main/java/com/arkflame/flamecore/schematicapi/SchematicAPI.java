@@ -22,7 +22,9 @@ import java.util.function.Consumer;
  * This version is fully integrated with a queued BlocksAPI and features a robust, paced pasting system.
  */
 public final class SchematicAPI {
-    private static final int MAX_BLOCKS_PER_TICK = 500; // How many blocks to process per tick from all schematics combined.
+    // How many blocks to process per tick from all schematics combined.
+    // This now refers to blocks *iterated*, not just placed, to prevent lag from schematics with lots of air.
+    private static final int MAX_BLOCKS_PER_TICK = 500;
 
     public static JavaPlugin plugin;
     private static final ConcurrentLinkedQueue<PasteTask> activePastes = new ConcurrentLinkedQueue<>();
@@ -38,10 +40,14 @@ public final class SchematicAPI {
     }
 
     /**
-     * Asynchronously copies a cuboid region into a new Schematic object.
+     * Asynchronously copies a cuboid region into a new Schematic object relative to a pivot point.
      * This operation is performed on the main thread to safely access world data.
+     * @param pos1 One corner of the cuboid selection.
+     * @param pos2 The opposite corner of the cuboid selection.
+     * @param pivot The location to use as the origin (0,0,0) of the schematic. When pasting, this point will be placed at the paste location.
+     * @return A future that will complete with the created Schematic.
      */
-    public static CompletableFuture<Schematic> copy(Location pos1, Location pos2) {
+    public static CompletableFuture<Schematic> copy(Location pos1, Location pos2, Location pivot) {
         CompletableFuture<Schematic> future = new CompletableFuture<>();
         new BukkitRunnable() {
             @Override
@@ -54,6 +60,10 @@ public final class SchematicAPI {
                 int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
                 int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
 
+                int pivotX = pivot.getBlockX();
+                int pivotY = pivot.getBlockY();
+                int pivotZ = pivot.getBlockZ();
+
                 List<RelativeBlockData> relativeBlocks = new java.util.ArrayList<>();
                 for (int x = minX; x <= maxX; x++) {
                     for (int y = minY; y <= maxY; y++) {
@@ -62,20 +72,33 @@ public final class SchematicAPI {
                             Block block = world.getBlockAt(x, y, z);
                             BlockWrapper wrapper = BlocksAPI.dataHandler.capture(block);
                             relativeBlocks.add(new RelativeBlockData(
-                                    x - minX, y - minY, z - minZ,
+                                    x - pivotX, y - pivotY, z - pivotZ, // Use pivot for relative coords
                                     wrapper.serialize()
                             ));
                         }
                     }
                 }
-                future.complete(new Schematic(relativeBlocks));
+                // The schematic's origin is set to the pivot, which is useful for saving
+                // and restoring to the exact same location.
+                future.complete(new Schematic(relativeBlocks).setOrigin(pivot));
             }
         }.runTask(plugin);
         return future;
     }
+
+    /**
+     * Asynchronously copies a cuboid region into a new Schematic object.
+     * The schematic's pivot point will be set to the location of {@code pos1}.
+     * This operation is performed on the main thread to safely access world data.
+     */
+    public static CompletableFuture<Schematic> copy(Location pos1, Location pos2) {
+        // Use pos1 as the default pivot for simplicity and backward compatibility.
+        return copy(pos1, pos2, pos1);
+    }
     
     public static CompletableFuture<Schematic> copy(Location location) {
-        return copy(location, location);
+        // For a single block, the pivot is the block's location itself.
+        return copy(location, location, location);
     }
     
     /**
@@ -124,7 +147,8 @@ public final class SchematicAPI {
         for (File file : files) {
             load(file).thenAccept(schematic -> {
                 if (schematic != null && schematic.getOrigin() != null) {
-                    schematic.paste(schematic.getOrigin(), pasted -> {
+                    // Restore, ignoring air is often safer to not punch holes in existing terrain.
+                    schematic.paste(schematic.getOrigin(), true, pasted -> {
                         if (pasted && deleteOnPaste) {
                             file.delete();
                         }
@@ -135,8 +159,8 @@ public final class SchematicAPI {
     }
     
     // Internal method to add a new paste job to the processor.
-    static void queuePaste(Schematic schematic, Location pasteLocation, Consumer<Boolean> callback) {
-        activePastes.add(new PasteTask(schematic, pasteLocation, callback));
+    static void queuePaste(Schematic schematic, Location pasteLocation, boolean ignoreAir, Consumer<Boolean> callback) {
+        activePastes.add(new PasteTask(schematic, pasteLocation, ignoreAir, callback));
     }
 
     private static void startProcessorTask() {
@@ -154,6 +178,7 @@ public final class SchematicAPI {
                     PasteTask task = iterator.next();
                     
                     // Process a chunk of this specific paste task.
+                    // The return value is the number of blocks considered from the schematic's list.
                     blocksProcessedThisTick += task.process(MAX_BLOCKS_PER_TICK - blocksProcessedThisTick);
 
                     if (task.isFinished()) {
