@@ -48,8 +48,13 @@ class EntityMapper {
     private <T> List<T> loadInternal(Class<T> clazz, String key, Object value) {
         List<T> results = new ArrayList<>();
         MappedEntity mappedEntity = getMappedEntity(clazz);
+        // If key is null, use the primary key's name, which is pre-validated.
+        // If key is not null, it's external input and MUST be validated to prevent SQL injection.
         String sqlKey = (key == null) ? mappedEntity.getPrimaryKey().getName() : key;
-        String sql = "SELECT * FROM " + mappedEntity.getTableName() + " WHERE " + sqlKey + " = ?";
+        validateIdentifier(sqlKey);
+
+        // This query is now safe as the table name and column name (sqlKey) are validated and quoted.
+        String sql = "SELECT * FROM `" + mappedEntity.getTableName() + "` WHERE `" + sqlKey + "` = ?";
 
         try (Connection conn = mysqlAPI.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setObject(1, value);
@@ -71,16 +76,13 @@ class EntityMapper {
         return results;
     }
     
-    // ... all other private/internal methods from the previous version remain here, unchanged ...
-    // upsertEntity, saveMapFields, loadMapFields, ensureSchemaIsUpToDate, DDL methods, etc.
-    // They correctly use the `mysqlAPI` field to get connections.
-    
     private void upsertEntity(Connection conn, MappedEntity mappedEntity, Object entity) throws Exception {
         Field pkField = mappedEntity.getPrimaryKey();
         pkField.setAccessible(true);
         Object pkValue = pkField.get(entity);
 
-        String checkSql = "SELECT COUNT(*) FROM " + mappedEntity.getTableName() + " WHERE " + pkField.getName() + " = ?";
+        // This query is safe as table and column names are pre-validated and quoted.
+        String checkSql = "SELECT COUNT(*) FROM `" + mappedEntity.getTableName() + "` WHERE `" + pkField.getName() + "` = ?";
         try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
             ps.setObject(1, pkValue);
             try (ResultSet rs = ps.executeQuery()) {
@@ -88,9 +90,10 @@ class EntityMapper {
                 boolean exists = rs.getInt(1) > 0;
                 
                 if (exists) {
-                    String updateSql = "UPDATE " + mappedEntity.getTableName() + " SET " +
-                            mappedEntity.getColumns().stream().map(f -> f.getName() + " = ?").collect(Collectors.joining(", ")) +
-                            " WHERE " + pkField.getName() + " = ?";
+                    // This query is safe as table and column names are pre-validated and quoted.
+                    String updateSql = "UPDATE `" + mappedEntity.getTableName() + "` SET " +
+                            mappedEntity.getColumns().stream().map(f -> "`" + f.getName() + "` = ?").collect(Collectors.joining(", ")) +
+                            " WHERE `" + pkField.getName() + "` = ?";
                     try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
                         int i = 1;
                         for (Field field : mappedEntity.getColumns()) {
@@ -101,9 +104,10 @@ class EntityMapper {
                         updatePs.executeUpdate();
                     }
                 } else {
-                    String columns = mappedEntity.getAllFields().stream().map(Field::getName).collect(Collectors.joining(", "));
+                    // This query is safe as table and column names are pre-validated and quoted.
+                    String columns = mappedEntity.getAllFields().stream().map(f -> "`" + f.getName() + "`").collect(Collectors.joining(", "));
                     String placeholders = mappedEntity.getAllFields().stream().map(f -> "?").collect(Collectors.joining(", "));
-                    String insertSql = "INSERT INTO " + mappedEntity.getTableName() + " (" + columns + ") VALUES (" + placeholders + ")";
+                    String insertSql = "INSERT INTO `" + mappedEntity.getTableName() + "` (" + columns + ") VALUES (" + placeholders + ")";
                     try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
                         int i = 1;
                         for (Field field : mappedEntity.getAllFields()) {
@@ -124,14 +128,15 @@ class EntityMapper {
             Map<?, ?> map = (Map<?, ?>) mapField.get(entity);
             if (map == null) continue;
 
-            String mapTableName = mappedEntity.getTableName() + "_" + mapField.getName();
-            String deleteSql = "DELETE FROM " + mapTableName + " WHERE owner_id = ?";
+            // Use the pre-validated table name from the mapped entity.
+            String mapTableName = mappedEntity.getMapTableName(mapField);
+            String deleteSql = "DELETE FROM `" + mapTableName + "` WHERE `owner_id` = ?";
             try(PreparedStatement ps = conn.prepareStatement(deleteSql)) {
                 ps.setObject(1, pkValue);
                 ps.executeUpdate();
             }
 
-            String insertSql = "INSERT INTO " + mapTableName + " (owner_id, map_key, map_value) VALUES (?, ?, ?)";
+            String insertSql = "INSERT INTO `" + mapTableName + "` (`owner_id`, `map_key`, `map_value`) VALUES (?, ?, ?)";
             try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
                 for (Map.Entry<?, ?> entry : map.entrySet()) {
                     ps.setObject(1, pkValue);
@@ -148,8 +153,9 @@ class EntityMapper {
         for (Field mapField : mappedEntity.getMapFields()) {
             mapField.setAccessible(true);
             Map<Object, Object> map = (Map<Object, Object>) mapField.getType().getDeclaredConstructor().newInstance();
-            String mapTableName = mappedEntity.getTableName() + "_" + mapField.getName();
-            String sql = "SELECT map_key, map_value FROM " + mapTableName + " WHERE owner_id = ?";
+            // Use the pre-validated table name from the mapped entity.
+            String mapTableName = mappedEntity.getMapTableName(mapField);
+            String sql = "SELECT `map_key`, `map_value` FROM `" + mapTableName + "` WHERE `owner_id` = ?";
             
             try(PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setObject(1, pkValue);
@@ -170,7 +176,8 @@ class EntityMapper {
             alterTable(conn, mappedEntity);
         }
         for (Field mapField : mappedEntity.getMapFields()) {
-            String mapTableName = mappedEntity.getTableName() + "_" + mapField.getName();
+            // Use the pre-validated map table name.
+            String mapTableName = mappedEntity.getMapTableName(mapField);
             if (!tableExists(conn, mapTableName)) {
                 createMapTable(conn, mapTableName, mappedEntity.getPrimaryKey(), mapField);
             }
@@ -178,6 +185,7 @@ class EntityMapper {
     }
 
     private void createTable(Connection conn, MappedEntity mappedEntity) throws SQLException {
+        // This is safe because all identifiers are pre-validated and quoted.
         String columns = mappedEntity.getAllFields().stream()
                 .map(f -> "`" + f.getName() + "` " + javaTypeToSqlType(f.getType()) + (f.isAnnotationPresent(PrimaryKey.class) ? " PRIMARY KEY" : ""))
                 .collect(Collectors.joining(", "));
@@ -188,6 +196,7 @@ class EntityMapper {
     }
 
     private void createMapTable(Connection conn, String tableName, Field ownerPk, Field mapField) throws SQLException {
+        // The tableName parameter is pre-validated by the caller.
         ParameterizedType mapType = (ParameterizedType) mapField.getGenericType();
         Class<?> keyType = (Class<?>) mapType.getActualTypeArguments()[0];
         Class<?> valueType = (Class<?>) mapType.getActualTypeArguments()[1];
@@ -201,6 +210,7 @@ class EntityMapper {
     }
 
     private void alterTable(Connection conn, MappedEntity mappedEntity) throws SQLException {
+        // This is safe because all identifiers are pre-validated and quoted.
         DatabaseMetaData meta = conn.getMetaData();
         List<String> existingColumns = new ArrayList<>();
         try (ResultSet rs = meta.getColumns(null, null, mappedEntity.getTableName(), null)) {
@@ -219,6 +229,7 @@ class EntityMapper {
     }
 
     private boolean tableExists(Connection conn, String tableName) throws SQLException {
+        // The tableName is pre-validated by callers.
         try (ResultSet rs = conn.getMetaData().getTables(null, null, tableName, null)) {
             return rs.next();
         }
@@ -240,19 +251,30 @@ class EntityMapper {
     
     private MappedEntity analyzeClass(Class<?> clazz) {
         String tableName = clazz.getSimpleName().toLowerCase() + "s";
+        validateIdentifier(tableName);
+
         Field primaryKey = null;
         List<Field> columns = new ArrayList<>();
         List<Field> mapFields = new ArrayList<>();
+        Map<Field, String> mapTableNames = new ConcurrentHashMap<>();
 
         for (Field field : clazz.getDeclaredFields()) {
             field.setAccessible(true);
             if (field.isAnnotationPresent(Transient.class)) continue;
             
+            validateIdentifier(field.getName());
+            
             if (field.isAnnotationPresent(PrimaryKey.class)) {
+                if (primaryKey != null) {
+                    throw new IllegalStateException("Entity " + clazz.getSimpleName() + " must not have more than one @PrimaryKey field.");
+                }
                 primaryKey = field;
             } else if (field.isAnnotationPresent(StoreAsTable.class)) {
                 if (Map.class.isAssignableFrom(field.getType())) {
                     mapFields.add(field);
+                    String mapTableName = tableName + "_" + field.getName();
+                    validateIdentifier(mapTableName);
+                    mapTableNames.put(field, mapTableName);
                 }
             } else {
                 columns.add(field);
@@ -261,7 +283,19 @@ class EntityMapper {
         if (primaryKey == null) {
             throw new IllegalStateException("Entity " + clazz.getSimpleName() + " must have a @PrimaryKey field.");
         }
-        return new MappedEntity(tableName, primaryKey, columns, mapFields);
+        return new MappedEntity(tableName, primaryKey, columns, mapFields, mapTableNames);
+    }
+    
+    /**
+     * Validates an SQL identifier (e.g., table or column name) to prevent SQL injection.
+     * Allows only alphanumeric characters and underscores, and must start with a letter or underscore.
+     * @param identifier The identifier to validate.
+     * @throws IllegalArgumentException if the identifier is invalid.
+     */
+    private void validateIdentifier(String identifier) {
+        if (identifier == null || identifier.isEmpty() || !identifier.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")) {
+            throw new IllegalArgumentException("Invalid or potentially unsafe SQL identifier: " + identifier + ". Only alphanumeric characters and underscores are allowed, and it must not start with a number.");
+        }
     }
 
     private static final class MappedEntity {
@@ -269,18 +303,21 @@ class EntityMapper {
         private final Field primaryKey;
         private final List<Field> columns;
         private final List<Field> mapFields;
+        private final Map<Field, String> mapTableNames;
         
-        MappedEntity(String tableName, Field primaryKey, List<Field> columns, List<Field> mapFields) {
+        MappedEntity(String tableName, Field primaryKey, List<Field> columns, List<Field> mapFields, Map<Field, String> mapTableNames) {
             this.tableName = tableName;
             this.primaryKey = primaryKey;
             this.columns = columns;
             this.mapFields = mapFields;
+            this.mapTableNames = mapTableNames;
         }
 
         String getTableName() { return tableName; }
         Field getPrimaryKey() { return primaryKey; }
         List<Field> getColumns() { return columns; }
         List<Field> getMapFields() { return mapFields; }
+        String getMapTableName(Field mapField) { return mapTableNames.get(mapField); }
 
         List<Field> getAllFields() {
             List<Field> all = new ArrayList<>(columns);
