@@ -1,6 +1,6 @@
 # NpcAPI Getting Started Guide
 
-The `NpcAPI` is a version-agnostic wrapper around the Citizens plugin, providing a simple, fluent interface for creating, controlling, and managing interactive NPCs with behaviors like pathfinding, combat, and automatic respawning in Spigot/BungeeCord plugins.
+The `NpcAPI` is a simple yet powerful, version-agnostic wrapper around the Citizens plugin, designed for Spigot/BungeeCord plugins. It provides a direct, fluent interface for creating, configuring, and controlling server-side NPCs with behaviors like pathfinding, combat, and automatic respawning.
 
 ## 1. Dependencies
 
@@ -28,7 +28,7 @@ Replace `2.0.30-SNAPSHOT` with the desired CitizensNPCs version compatible with 
 
 ## 2. Initialize NpcAPI
 
-Initialize the `NpcAPI` in your plugin's `onEnable` method to set up necessary listeners and tasks.
+Enable the `NpcAPI` in your plugin's `onEnable` method to set up necessary listeners and tasks.
 
 ```java
 import com.arkflame.flamecore.npcapi.NpcAPI;
@@ -37,14 +37,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class MyPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
-        NpcAPI.init(this);
+        NpcAPI.enable(this);
     }
 }
 ```
 
-## 3. Create a Basic NPC
+## 3. Create an NPC
 
-Use the fluent `Npc.builder()` to create, configure, and spawn an NPC with a name and skin. By default, NPCs are temporary and hittable.
+Create and spawn an NPC with a single call to `Npc.create()`, specifying its name and spawn location.
 
 ```java
 import com.arkflame.flamecore.npcapi.Npc;
@@ -54,97 +54,141 @@ import org.bukkit.World;
 World world = // ... get world
 Location spawnLocation = new Location(world, 100, 64, 100);
 
-Npc guard = Npc.builder("Guard")
-    .skin("Notch") // Fetches skin asynchronously
-    .location(spawnLocation)
-    .buildAndSpawn();
+Npc guard = Npc.create("Guard", spawnLocation);
 ```
 
-## 4. Make NPCs Persistent and Respawnable
+## 4. Configure NPC Properties
 
-Configure NPCs to persist across server restarts and respawn after being killed using `.persistent()` and `.respawnTime()`.
+Configure the NPC using setter methods for properties like spawn location, respawn time, persistence, and appearance.
+
+### a) Basic Properties
+
+Set the spawn location, respawn time, and persistence.
 
 ```java
-Location bossRoomLocation = // ... get location
-
-Npc boss = Npc.builder("&c&lMagma Lord")
-    .skin("Jeb_")
-    .location(bossRoomLocation)
-    .persistent(true) // Saves NPC in Citizens' config
-    .respawnTime(60) // Respawns 60 seconds after death
-    .buildAndSpawn();
+Location newLocation = // ... get location
+guard.setSpawnLocation(newLocation); // Updates spawn point or teleports if spawned
+guard.setRespawnTime(30); // Respawns after 30 seconds; < 0 disables
+guard.setPersistent(true); // Saves NPC to Citizens' config
 ```
 
-## 5. Control NPC Behavior
+### b) Appearance
 
-Use high-level methods to manage NPC movement, combat, and guard behavior.
+Set the NPC’s skin and entity type, and equip items compatible with Bukkit 1.8 and modern versions.
 
-### a) Movement
+```java
+import com.arkflame.flamecore.npcapi.Npc.EquipmentSlot;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.entity.EntityType;
 
-Direct NPCs to walk to a location, follow a player, or stop all behavior.
+guard.setSkin("Notch"); // Player skin, fetched asynchronously
+guard.setEntityType(EntityType.ZOMBIE); // Change to zombie (skins for PLAYER only)
+guard.setEquipment(EquipmentSlot.MAIN_HAND, new ItemStack(Material.DIAMOND_SWORD));
+guard.setEquipment(EquipmentSlot.HELMET, new ItemStack(Material.DIAMOND_HELMET));
+guard.setEquipment(EquipmentSlot.OFF_HAND, new ItemStack(Material.SHIELD)); // Safe for 1.9+
+```
+
+### c) Combat
+
+Configure combat properties, including custom damage, hit frequency, and no-damage ticks for responsive combat.
+
+```java
+guard.setCustomDamage(8.0); // Deals 4 hearts of damage
+guard.setHitFrequency(15); // Attacks every 15 ticks
+guard.setNoDamageTicks(10); // Can be damaged 2 times per second
+```
+
+### d) Allies
+
+Manage entities that the NPC ignores during `attackNearby()` behavior.
 
 ```java
 import org.bukkit.entity.Player;
 
-Location market = // ... get location
-Player playerToFollow = // ... get player
-
-guard.moveTo(market); // Walk to a specific spot
-guard.follow(playerToFollow); // Follow a player
-guard.stop(); // Stop all movement and behavior
+Player somePlayer = // ... get player
+guard.addAlly(somePlayer); // NPC ignores this player
+guard.removeAlly(somePlayer); // NPC can attack player again
+guard.clearAllies(); // Clear all allies
 ```
 
-### b) Combat
+## 5. Control NPC Behavior
 
-Configure NPCs to attack a specific player with automatic pathfinding and damage calculation (based on 1.8 PvP values).
+Command the NPC to perform actions, with new behaviors automatically stopping previous ones.
 
 ```java
-Player target = // ... get player
-guard.attack(target); // Attack a specific player
-guard.stop(); // Stop the current attack
+import org.bukkit.entity.Entity;
+
+Location targetLocation = // ... get location
+Entity targetEntity = // ... get entity
+
+guard.attack(targetEntity); // Attack a specific entity
+guard.attackNearby(20); // Attack non-allies within 20 blocks
+guard.moveTo(targetLocation); // Move to a location
+guard.follow(targetEntity); // Follow an entity
+guard.stopBehavior(); // Stop all actions, become idle
 ```
 
-### c) Guard Mode (Attack Nearby)
+## 6. Manage NPC Lifecycle
 
-Enable NPCs to automatically attack the nearest valid player (e.g., non-creative) within a specified radius.
+Remove or retrieve NPCs created by your plugin.
 
-```java
-boss.attackNearby(15.0); // Attack non-creative players within 15 blocks
-boss.stop(); // Stop guard mode
-```
+### a) Destroy NPCs
 
-## 6. Manage NPCs
-
-Safely find and manage NPCs created by your plugin.
-
-### a) Find NPCs
-
-Locate NPCs by proximity or retrieve all NPCs created by your plugin.
-
-```java
-import java.util.List;
-import java.util.Optional;
-
-Optional<Npc> nearestNpc = NpcAPI.getNearest(player.getLocation());
-nearestNpc.ifPresent(npc -> {
-    player.sendMessage("The nearest NPC is " + npc.getName());
-});
-
-List<Npc> nearbyNpcs = NpcAPI.getNearby(player.getLocation(), 20.0);
-```
-
-### b) Remove NPCs
-
-Remove specific or all NPCs, including cleanup for temporary NPCs.
+Permanently remove an NPC or all NPCs created by your plugin.
 
 ```java
 import java.util.Collection;
 
-Collection<Npc> myNpcs = NpcAPI.getAll(); // Get all plugin NPCs
-NpcAPI.destroyAll(); // Permanently destroy all plugin NPCs
+guard.destroy(); // Remove a single NPC
+Collection<Npc> myNpcs = NpcAPI.getAllNpcs(); // Get all plugin NPCs
+NpcAPI.destroyAll(); // Remove all plugin NPCs
 
 @Override
 public void onDisable() {
-    NpcAPI.destroyAllTemporary(); // Clean up temporary NPCs
+    NpcAPI.destroyAll(); // Clean up all NPCs
 }
+```
+
+### b) Retrieve NPCs
+
+Find NPCs by ID or iterate through all managed NPCs.
+
+```java
+import java.util.Optional;
+import java.util.UUID;
+
+UUID npcId = guard.getUniqueId();
+Optional<Npc> retrievedNpc = NpcAPI.getNpc(npcId);
+retrievedNpc.ifPresent(npc -> npc.follow(somePlayer));
+
+for (Npc npc : NpcAPI.getAllNpcs()) {
+    System.out.println("Found managed NPC: " + npc.getName());
+}
+```
+
+## 7. Full Example: Nether Guardian NPC
+
+Create and configure a persistent NPC with combat and guard behavior.
+
+```java
+import com.arkflame.flamecore.npcapi.Npc;
+import com.arkflame.flamecore.npcapi.Npc.EquipmentSlot;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+
+Player player = // ... get player
+Location spawnLocation = player.getLocation().add(5, 0, 0);
+
+Npc guardian = Npc.create("Nether Guardian", spawnLocation);
+guardian.setPersistent(true);
+guardian.setRespawnTime(60); // Respawn after 1 minute
+guardian.setSkin("Herobrine");
+guardian.setEquipment(EquipmentSlot.MAIN_HAND, new ItemStack(Material.NETHERITE_SWORD));
+guardian.setEquipment(EquipmentSlot.CHESTPLATE, new ItemStack(Material.NETHERITE_CHESTPLATE));
+guardian.setCustomDamage(10.0); // 5 hearts of damage
+guardian.setHitFrequency(20); // Attacks once per second
+guardian.attackNearby(25); // Attack non-allies within 25 blocks
 ```

@@ -1,59 +1,61 @@
 package com.arkflame.flamecore.npcapi;
 
 import com.arkflame.flamecore.npcapi.util.CitizensCompat;
-import net.citizensnpcs.api.CitizensAPI;
+import com.arkflame.flamecore.npcapi.util.DamageUtil;
 import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.api.trait.trait.Owner;
 import net.citizensnpcs.trait.LookClose;
-import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
-import java.util.Comparator;
+import java.lang.reflect.Method;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 public class Npc {
+    public enum EquipmentSlot {
+        HELMET, CHESTPLATE, LEGGINGS, BOOTS, MAIN_HAND, OFF_HAND
+    }
+    
     private final NPC citizensNpc;
     private final UUID flameId;
     private BukkitRunnable behaviorTask;
     
-    // State fields
+    // --- State Fields ---
+    private final Set<UUID> allies = new HashSet<>();
+    private double customDamage = -1.0;
+    
+    // --- Configurable Fields ---
     public Location initialSpawnLocation;
     public int respawnTime = -1;
     public boolean persistent = false;
-    public int hitDelay = 10;
+    private int noDamageTicks = 10;
+    private int hitFrequency = 10;
     public EntityType entityType = EntityType.PLAYER;
     
     public Behavior behavior = Behavior.IDLE;
     public Entity targetEntity;
     public Location targetLocation;
 
+
     /**
-     * The ONLY constructor. It is now package-private and called exclusively by the builder.
+     * Public constructor, called exclusively by the static create method.
      */
-    Npc(NPC citizensNpc, UUID flameId) {
+    public Npc(NPC citizensNpc, UUID flameId) {
         this.citizensNpc = citizensNpc;
-        this.flameId = flameId; // Use the provided FlameCore UUID
+        this.flameId = flameId;
         if (citizensNpc.getEntity() != null) {
             this.entityType = citizensNpc.getEntity().getType();
         }
-    }
-
-    public static Builder builder(String name) {
-        if (!NpcAPI.isEnabled()) {
-            throw new IllegalStateException("NpcAPI is not enabled because Citizens plugin is not installed.");
-        }
-        return new Builder(name);
     }
     
     // --- Setters & Getters ---
@@ -61,17 +63,38 @@ public class Npc {
     public void setEntityType(EntityType type) { this.entityType = type; }
     public void setRespawnTime(int seconds) { this.respawnTime = seconds; }
     public void setPersistent(boolean persistent) { this.persistent = persistent; }
-    public void setHitDelay(int ticks) { this.hitDelay = ticks; }
     public EntityType getEntityType() { return this.entityType; }
     public int getRespawnTime() { return respawnTime; }
     public Location getInitialSpawnLocation() { return initialSpawnLocation; }
-    public int getHitDelay() { return hitDelay; }
     public NPC getHandle() { return this.citizensNpc; }
     public String getName() { return citizensNpc.getName(); }
     public Location getLocation() { return isSpawned() ? citizensNpc.getEntity().getLocation() : citizensNpc.getStoredLocation(); }
     public boolean isSpawned() { return citizensNpc.isSpawned(); }
-    public UUID getUniqueId() { return flameId; } // This now returns OUR UUID.
-    public UUID getCitizensId() { return citizensNpc.getUniqueId(); } // Getter for the Citizens UUID
+    public UUID getUniqueId() { return flameId; }
+    public UUID getCitizensId() { return citizensNpc.getUniqueId(); }
+
+    public void setNoDamageTicks(int ticks) { this.noDamageTicks = Math.max(0, ticks); }
+    public int getNoDamageTicks() { return this.noDamageTicks; }
+    public void setHitFrequency(int ticks) { this.hitFrequency = Math.max(1, ticks); }
+    public int getHitFrequency() { return this.hitFrequency; }
+    public void setCustomDamage(double damage) { this.customDamage = damage; }
+    public double getCustomDamage() { return this.customDamage; }
+
+    public double getEffectiveDamage() {
+        if (customDamage >= 0) {
+            return customDamage;
+        }
+
+        ItemStack weapon = null;
+        if (isSpawned()) {
+            Entity entity = getHandle().getEntity();
+            if (entity instanceof LivingEntity) {
+                 weapon = ((LivingEntity) entity).getEquipment().getItemInHand();
+            }
+        }
+        
+        return DamageUtil.getDamage(weapon);
+    }
 
     // --- Public API Methods ---
     public void spawn() {
@@ -79,10 +102,8 @@ public class Npc {
             NpcAPI.getPlugin().getLogger().warning("Attempted to spawn NPC '" + getName() + "' without an initial location set.");
             return;
         }
-        citizensNpc.spawn(initialSpawnLocation);
-        Entity npcEntity = citizensNpc.getEntity();
-        if (npcEntity instanceof LivingEntity) {
-            ((LivingEntity) npcEntity).setMaximumNoDamageTicks(getHitDelay());
+        if (!citizensNpc.isSpawned()) {
+            citizensNpc.spawn(initialSpawnLocation);
         }
     }
     
@@ -93,7 +114,9 @@ public class Npc {
         stopBehavior();
         if (this.persistent) {
             File npcFile = new File(NpcAPI.getNpcsFolder(), getUniqueId() + ".yml");
-            if (npcFile.exists()) npcFile.delete();
+            if (npcFile.exists()) {
+                npcFile.delete();
+            }
         }
         citizensNpc.destroy();
     }
@@ -107,6 +130,11 @@ public class Npc {
         NpcSerializer.serialize(this);
     }
     
+    // --- Ally Management Methods ---
+    public void addAlly(LivingEntity entity) { if (entity != null) this.allies.add(entity.getUniqueId()); }
+    public void removeAlly(LivingEntity entity) { if (entity != null) this.allies.remove(entity.getUniqueId()); }
+    public void clearAllies() { this.allies.clear(); }
+    public boolean isAlly(Entity entity) { return allies.contains(entity.getUniqueId()); }
 
     // --- Behavior Methods ---
     public void stopBehavior() {
@@ -124,23 +152,20 @@ public class Npc {
     
     public void attack(Entity target) {
         stopBehavior();
+        if (!(target instanceof LivingEntity)) return;
         this.behavior = Behavior.ATTACKING;
         this.targetEntity = target;
-        // Start the task for the new behavior
         this.behaviorTask = new NpcAttackTask(this);
-        this.behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 5L);
-    }
-    
-    public void attackNearby() {
-        attackNearby(10);
+        this.behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 1L);
     }
 
+    public void attackNearby() { attackNearby(10); }
+    
     public void attackNearby(double radius) {
         stopBehavior();
         this.behavior = Behavior.ATTACKING_NEARBY;
-        // Start the new controller task
-        this.behaviorTask = new NpcGuardTask(this, radius);
-        this.behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 20L);
+        this.behaviorTask = new AttackNearbyTask(this, radius);
+        this.behaviorTask.runTaskTimer(NpcAPI.getPlugin(), 0L, 10L); 
     }
 
     public void moveTo(Location location) {
@@ -153,7 +178,7 @@ public class Npc {
         citizensNpc.getNavigator().setTarget(target, false);
     }
 
-    public void breakBlock(Block block) {
+    public void breakBlock(final Block block) {
         stopBehavior();
         new BukkitRunnable() {
             int ticks = 0;
@@ -173,80 +198,117 @@ public class Npc {
         }.runTaskTimer(NpcAPI.getPlugin(), 0L, 10L);
     }
 
-    // --- Builder Class ---
-    public static class Builder {
-        private final String name;
-        private Location location;
-        private String skinName;
-        private EntityType entityType = EntityType.PLAYER;
-        private boolean persistent = false;
-        private int respawnTime = -1;
-        private int hitDelay = 10;
-
-        private Builder(String name) { this.name = name; }
-        public Builder location(Location location) { this.location = location; return this; }
-        public Builder skin(String skinName) { this.skinName = skinName; return this; }
-        public Builder type(EntityType entityType) { this.entityType = entityType; return this; }
-        public Builder persistent(boolean persistent) { this.persistent = persistent; return this; }
-        public Builder respawnTime(int seconds) { this.respawnTime = seconds; return this; }
-        public Builder hitDelay(int ticks) { this.hitDelay = Math.max(0, ticks); return this; }
-        public Location getLocation() { return location; }
-
-        /**
-         * The definitive build method. It now constructs the Npc object atomically.
-         */
-        public Npc build() {
-            // Step 1: Create the Citizens NPC in the temporary registry.
-            NPCRegistry registry = CitizensCompat.getTemporaryNPCRegistry();
-            NPC npc = registry.createNPC(this.entityType, this.name);
-            
-            // Step 2: Create our authoritative wrapper with its own unique FlameCore ID.
-            Npc wrappedNpc = new Npc(npc, UUID.randomUUID());
-            
-            // Register it in our map
-            NpcAPI.registerNpc(wrappedNpc);
-            
-            // Step 3: Configure the wrapper with all builder properties.
-            wrappedNpc.setPersistent(this.persistent);
-            wrappedNpc.setRespawnTime(this.respawnTime);
-            wrappedNpc.setHitDelay(this.hitDelay);
-            wrappedNpc.setEntityType(this.entityType);
-            wrappedNpc.setInitialSpawnLocation(this.location);
-            
-            // Step 4: Configure the Citizens NPC with traits.
-            npc.setProtected(false);
-            npc.getOrAddTrait(Owner.class).setOwner(name);
-            npc.getOrAddTrait(LookClose.class).lookClose(true);
-
-            if (skinName != null && entityType == EntityType.PLAYER) {
-                applySkin(npc, skinName);
-            }
-            
-            // Step 5: Register the complete, configured wrapper in our API.
-            NpcAPI.registerNpc(wrappedNpc);
-            
-            // Step 6: If persistent, save it to a file named after OUR UUID.
-            if (this.persistent) {
-                wrappedNpc.save();
-            }
-            
-            return wrappedNpc;
-        }
-
-        public Npc buildAndSpawn() {
-            if (location == null) {
-                NpcAPI.getPlugin().getLogger().warning("Attempted to call buildAndSpawn() on an NPC builder ('" + this.name + "') without a location set. Aborting spawn.");
-                return null;
-            }
-            Npc npc = build();
-            if (npc != null) {
-                npc.spawn();
-            }
-            return npc;
+    /**
+     * Creates a new NPC with a given name and spawns it at a location.
+     * This is the new, simplified entry point for creating NPCs.
+     * @param name The name of the NPC.
+     * @param spawnLocation The location where the NPC will be created and spawned.
+     * @return The newly created Npc instance.
+     */
+    public static Npc create(String name, Location spawnLocation) {
+        if (!NpcAPI.isEnabled()) {
+            throw new IllegalStateException("NpcAPI is not enabled because Citizens plugin is not installed.");
         }
         
-        private void applySkin(NPC npc, String skinName) {
-            CompletableFuture.runAsync(() -> CitizensCompat.setSkin(npc, skinName));
+        NPCRegistry registry = CitizensCompat.getTemporaryNPCRegistry();
+        // Default to PLAYER type, can be changed later with setEntityType()
+        NPC citizensNpc = registry.createNPC(EntityType.PLAYER, name);
+
+        Npc npc = new Npc(citizensNpc, UUID.randomUUID());
+        
+        // Configure default traits
+        npc.getHandle().setProtected(false);
+        npc.getHandle().getOrAddTrait(Owner.class).setOwner(name);
+        npc.getHandle().getOrAddTrait(LookClose.class).lookClose(true);
+
+        // Set the initial location
+        npc.setSpawnLocation(spawnLocation);
+        
+        // Register and spawn
+        NpcAPI.registerNpc(npc);
+        npc.spawn();
+
+        return npc;
+    }
+
+    /**
+     * Sets the location where the NPC will spawn and respawn.
+     * If the NPC is already spawned, it will be teleported to this new location.
+     * @param location The new spawn location.
+     */
+    public void setSpawnLocation(Location location) {
+        this.initialSpawnLocation = location;
+        if (isSpawned()) {
+            teleport(location);
+        }
+    }
+    
+    /**
+     * Changes the skin of the NPC. This operation is performed asynchronously.
+     * This only works for NPCs of EntityType.PLAYER.
+     * @param skinName The name of the player whose skin should be used.
+     */
+    public void setSkin(final String skinName) {
+        if (getEntityType() != EntityType.PLAYER) {
+            NpcAPI.getPlugin().getLogger().warning("Attempted to set skin for a non-player NPC '" + getName() + "'.");
+            return;
+        }
+        // Use Bukkit's scheduler for 1.8 compatibility
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                CitizensCompat.setSkin(getHandle(), skinName);
+            }
+        }.runTaskAsynchronously(NpcAPI.getPlugin());
+    }
+
+/**
+     * Sets a piece of equipment for the NPC.
+     * For 1.8 compatibility, this uses direct equipment setting.
+     * The OFF_HAND slot is handled safely using reflection to ensure it only
+     * runs on servers that support it (1.9+).
+     * @param slot The equipment slot to modify.
+     * @param item The item to place in the slot.
+     */
+    public void setEquipment(EquipmentSlot slot, ItemStack item) {
+        if (!isSpawned() || getHandle().getEntity() == null) {
+            NpcAPI.getPlugin().getLogger().warning("Attempted to set equipment on a despawned NPC '" + getName() + "'.");
+            return;
+        }
+
+        LivingEntity entity = (LivingEntity) getHandle().getEntity();
+        
+        switch (slot) {
+            case HELMET:
+                entity.getEquipment().setHelmet(item);
+                break;
+            case CHESTPLATE:
+                entity.getEquipment().setChestplate(item);
+                break;
+            case LEGGINGS:
+                entity.getEquipment().setLeggings(item);
+                break;
+            case BOOTS:
+                entity.getEquipment().setBoots(item);
+                break;
+            case MAIN_HAND:
+                entity.getEquipment().setItemInHand(item);
+                break;
+            case OFF_HAND:
+                try {
+                    // This is the direct feature detection. Try to get the method.
+                    Method setOffHand = entity.getEquipment().getClass().getMethod("setItemInOffHand", ItemStack.class);
+                    // If we get here, the method exists. Now, invoke it.
+                    setOffHand.invoke(entity.getEquipment(), item);
+                } catch (NoSuchMethodException e) {
+                    // This exception is expected on servers before 1.9. It's not an error.
+                    NpcAPI.getPlugin().getLogger().warning("Cannot set off-hand item for NPC '" + getName() + "'. This server version does not support it.");
+                } catch (Exception e) {
+                    // Any other exception is a real error during invocation.
+                    NpcAPI.getPlugin().getLogger().severe("Failed to set off-hand item for NPC '" + getName() + "' via reflection.");
+                    e.printStackTrace();
+                }
+                break;
         }
     }
 }

@@ -3,12 +3,10 @@ package com.arkflame.flamecore.npcapi;
 import com.arkflame.flamecore.configapi.Config;
 import com.arkflame.flamecore.configapi.ConfigAPI;
 import com.arkflame.flamecore.npcapi.util.CitizensCompat;
-import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -25,7 +23,15 @@ import java.util.stream.Collectors;
 public final class NpcAPI {
     private static JavaPlugin plugin;
     private static boolean citizensEnabled = false;
+
+    // The main map, keyed by our custom flameId.
     private static final Map<UUID, Npc> managedNpcs = new ConcurrentHashMap<>();
+
+    // *** FIX: ADDED LOOKUP MAP ***
+    // This new map links the Citizens-generated UUID to our custom flameId.
+    // Key: Citizens NPC UUID, Value: FlameCore NPC UUID (flameId)
+    private static final Map<UUID, UUID> citizensToFlameMap = new ConcurrentHashMap<>();
+
     private static File npcsFolder;
 
     public static void init(JavaPlugin pluginInstance) {
@@ -42,7 +48,6 @@ public final class NpcAPI {
         plugin.getLogger().info("Successfully hooked into Citizens for NpcAPI.");
         Bukkit.getPluginManager().registerEvents(new NpcListener(), plugin);
         
-        // Load persistent NPCs after a 1-tick delay to ensure Citizens is fully loaded.
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -51,15 +56,12 @@ public final class NpcAPI {
         }.runTask(plugin);
     }
     
-    /**
-     * Checks if the NpcAPI is enabled and functional.
-     * @return True if Citizens is found on the server.
-     */
     public static boolean isEnabled() {
         return citizensEnabled;
     }
 
     /**
+     * *** FIX: CORRECTED LOOKUP LOGIC ***
      * Gets our managed Npc wrapper for a Bukkit Entity, if it is one of our NPCs.
      * @param entity The entity to check.
      * @return An Optional containing the Npc wrapper.
@@ -68,31 +70,44 @@ public final class NpcAPI {
         if (!isEnabled() || entity == null || !CitizensCompat.getTemporaryNPCRegistry().isNPC(entity)) {
             return Optional.empty();
         }
-        return Optional.ofNullable(managedNpcs.get(entity.getUniqueId()));
+        // An entity spawned by Citizens has the same UUID as the Citizens NPC object.
+        // 1. Use the entity's UUID (which is the Citizens UUID) to find our flameId.
+        UUID flameId = citizensToFlameMap.get(entity.getUniqueId());
+        if (flameId == null) {
+            return Optional.empty();
+        }
+        // 2. Use the flameId to get the Npc wrapper from the main map.
+        return Optional.ofNullable(managedNpcs.get(flameId));
     }
 
     /**
+     * *** FIX: CORRECTED LOOKUP LOGIC ***
      * Gets our managed Npc wrapper for a raw Citizens NPC object.
      */
     public static Optional<Npc> getNpc(NPC npc) {
         if (!isEnabled() || npc == null) return Optional.empty();
-        return Optional.ofNullable(managedNpcs.get(npc.getUniqueId()));
+        // 1. Use the Citizens NPC's UUID to find our flameId.
+        UUID flameId = citizensToFlameMap.get(npc.getUniqueId());
+        if (flameId == null) {
+            return Optional.empty();
+        }
+        // 2. Use the flameId to get the Npc wrapper from the main map.
+        return Optional.ofNullable(managedNpcs.get(flameId));
     }
 
     /**
-     * Gets a collection of all NPCs created and managed by THIS API.
-     * @return An unmodifiable collection of Npc objects.
+     * Retrieves a read-only collection of all Npc instances currently managed by the API.
+     * This is useful for iterating over all custom NPCs.
+     * @return A collection of all managed Npc objects.
      */
+    public static Collection<Npc> getAllNpcs() {
+        return Collections.unmodifiableCollection(managedNpcs.values());
+    }
+
     public static Collection<Npc> getAll() {
         return Collections.unmodifiableCollection(managedNpcs.values());
     }
 
-    /**
-     * Gets a list of all managed NPCs within a specific radius of a location.
-     * @param location The center of the search.
-     * @param radius The radius in blocks.
-     * @return A list of nearby Npc objects.
-     */
     public static List<Npc> getNearby(Location location, double radius) {
         if (!isEnabled() || location.getWorld() == null) {
             return Collections.emptyList();
@@ -105,11 +120,6 @@ public final class NpcAPI {
             .collect(Collectors.toList());
     }
     
-    /**
-     * Finds the single closest managed NPC to a given location.
-     * @param location The location to search from.
-     * @return An Optional containing the nearest Npc.
-     */
     public static Optional<Npc> getNearest(Location location) {
         if (!isEnabled() || location.getWorld() == null) {
             return Optional.empty();
@@ -120,24 +130,14 @@ public final class NpcAPI {
             .min(Comparator.comparingDouble(npc -> npc.getLocation().distanceSquared(location)));
     }
 
-    /**
-     * Despawns all managed NPCs without removing their data files.
-     * Ideal for calling in onDisable.
-     */
     public static void despawnAll() {
         getAll().forEach(Npc::despawn);
     }
 
-    /**
-     * Permanently destroys all NPCs created by this API, deleting their data files.
-     */
     public static void destroyAll() {
         new ConcurrentHashMap<>(managedNpcs).values().forEach(Npc::destroy);
     }
 
-    /**
-     * Destroys only the non-persistent (temporary) NPCs created by this API.
-     */
     public static void destroyAllTemporary() {
         if (!isEnabled()) return;
         CitizensCompat.getTemporaryNPCRegistry().forEach(npc -> {
@@ -158,7 +158,7 @@ public final class NpcAPI {
             String uuidString = fileName.substring(0, fileName.length() - 4);
             
             try {
-                UUID flameId = UUID.fromString(uuidString); // This is OUR UUID
+                UUID flameId = UUID.fromString(uuidString);
                 Config npcConfig = ConfigAPI.getConfig("npcs/" + fileName);
                 
                 if (npcConfig.getRaw().getKeys(false).isEmpty() || !npcConfig.contains("name")) {
@@ -190,15 +190,30 @@ public final class NpcAPI {
     static JavaPlugin getPlugin() { return plugin; }
     static File getNpcsFolder() { return npcsFolder; }
     
+    /**
+     * *** FIX: UPDATED REGISTRATION LOGIC ***
+     * Registers the Npc wrapper in both the main map and the lookup map.
+     */
     static void registerNpc(Npc npc) {
         if (npc != null) {
-            managedNpcs.put(npc.getUniqueId(), npc);
+            managedNpcs.put(npc.getUniqueId(), npc); // Keyed by flameId
+            citizensToFlameMap.put(npc.getCitizensId(), npc.getUniqueId()); // Add entry to the lookup map
         }
     }
 
-    static void unregisterNpc(UUID npcId) {
-        if (npcId != null) {
-            managedNpcs.remove(npcId);
+    /**
+     * *** FIX: UPDATED UN-REGISTRATION LOGIC ***
+     * Unregisters the NPC from both maps using the Citizens UUID as the entry point.
+     * This is called by NpcListener, which gets the Citizens NPC from the event.
+     */
+    static void unregisterNpc(UUID citizensId) {
+        if (citizensId != null) {
+            // 1. Remove from the lookup map and get the corresponding flameId.
+            UUID flameId = citizensToFlameMap.remove(citizensId);
+            // 2. If a flameId was found, use it to remove from the main map.
+            if (flameId != null) {
+                managedNpcs.remove(flameId);
+            }
         }
     }
 }

@@ -36,7 +36,8 @@ class NpcSerializer {
         }
         
         config.set("respawn-time", npc.getRespawnTime());
-        config.set("hit-delay", npc.getHitDelay());
+        config.set("no-damage-ticks", npc.getNoDamageTicks());
+        config.set("hit-frequency", npc.getHitFrequency());
         
         config.save();
     }
@@ -79,7 +80,8 @@ class NpcSerializer {
             }
         }
         npc.setRespawnTime(config.getRaw().getInt("respawn-time", -1));
-        npc.setHitDelay(config.getRaw().getInt("hit-delay", 10));
+        npc.setNoDamageTicks(config.getRaw().getInt("no-damage-ticks", 10));
+        npc.setHitFrequency(config.getRaw().getInt("hit-frequency", 10));
         
         npc.getHandle().setProtected(false);
         npc.getHandle().getOrAddTrait(Owner.class).setOwner(npc.getName());

@@ -1,22 +1,23 @@
 package com.arkflame.flamecore.npcapi;
 
 import com.arkflame.flamecore.npcapi.util.CitizensCompat;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.scheduler.BukkitRunnable;
 
 /**
- * A self-contained task that manages the behavior of an NPC actively attacking a single target.
+ * A self-contained task that manages an NPC actively attacking a single target.
+ * This task runs every tick to provide fast and responsive combat.
  */
 class NpcAttackTask extends BukkitRunnable {
     private final Npc npc;
-    private final Entity target;
-    private long lastAttackTime = 0;
-    private final long attackInterval = 500; // 10 ticks
+    private final LivingEntity target;
+    private int attackCooldownTicks;
 
     public NpcAttackTask(Npc npc) {
         this.npc = npc;
-        this.target = npc.targetEntity;
+        // We can safely cast here because the Npc.attack() method checks the type.
+        this.target = (LivingEntity) npc.targetEntity;
+        this.attackCooldownTicks = 0;
     }
     
     @Override
@@ -27,24 +28,31 @@ class NpcAttackTask extends BukkitRunnable {
             return;
         }
         
-        // Continuously navigate towards the target.
-        npc.getHandle().getNavigator().setTarget(target, false);
+        // Decrement cooldown timer
+        if (attackCooldownTicks > 0) {
+            attackCooldownTicks--;
+        }
+
+        // Make the NPC always face its target
+        CitizensCompat.faceLocation(npc.getHandle(), target.getEyeLocation());
         
-        // Check if the NPC is within attack range (3 blocks).
+        // Check if the NPC is within attack range (e.g., 3 blocks, squared to 9).
         if (npc.getLocation().distanceSquared(target.getLocation()) < 9) {
-            // Stop moving to engage in combat.
+            // In range, stop navigating to engage.
             npc.getHandle().getNavigator().cancelNavigation();
 
-            // Check if the attack cooldown has passed.
-            if (System.currentTimeMillis() - lastAttackTime > attackInterval) {
-                // Face the target, swing, and deal damage.
-                CitizensCompat.faceLocation(npc.getHandle(), target.getLocation());
+            // Check if the attack is off cooldown.
+            if (attackCooldownTicks <= 0) {
                 CitizensCompat.playSwingAnimation(npc.getHandle());
-                if (target instanceof LivingEntity) {
-                    ((LivingEntity) target).damage(1.0, npc.getHandle().getEntity());
-                }
-                lastAttackTime = System.currentTimeMillis();
+                target.damage(npc.getEffectiveDamage(), npc.getHandle().getEntity());
+                
+                // Use the OFFENSIVE frequency for the cooldown
+                attackCooldownTicks = npc.getHitFrequency();
             }
+        } else {
+            // Out of range, navigate towards the target.
+            // The 'true' parameter means it will use pathfinding to get close.
+            npc.getHandle().getNavigator().setTarget(target, true);
         }
     }
 }

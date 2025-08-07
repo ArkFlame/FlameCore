@@ -186,10 +186,8 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                 .setExecutor(ctx -> {
                                     Player player = ctx.getPlayer();
                                     String name = ctx.getArgument("name");
-                                    Npc.builder(name)
-                                            .skin(player.getName())
-                                            .location(player.getLocation())
-                                            .buildAndSpawn();
+                                    Npc npc = Npc.create(name, player.getLocation());
+                                    npc.setSkin(name);
                                     LangAPI.getMessage("commands.npc.created").with("name", name).send(player);
                                 }))
                         .addSubCommand(Command.create("moveto")
@@ -237,7 +235,7 @@ public class FlameCorePlugin extends JavaPlugin implements Listener {
                                         double radius = ctx.getArgumentOrDefault("radius", 10);
                                         npc.attackNearby(radius);
                                         LangAPI.getMessage("commands.npc.guard_mode")
-                                                .with("npc", npc.getName())
+                                                .with("name", npc.getName())
                                                 .with("radius", radius)
                                                 .send(player);
                                     } else {
